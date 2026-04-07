@@ -117,3 +117,18 @@ html, body {
   width: 100%;
   height: 100%;
 }
+
+.toolbar-label {
+  display: inline;
+}
+
+@media (max-width: 500px) {
+  .toolbar-label {
+    display: none;
+  }
+}
+
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
