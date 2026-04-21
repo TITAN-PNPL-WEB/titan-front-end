@@ -132,3 +132,15 @@ button {
   -webkit-appearance: none;
   appearance: none;
 }
+
+.react-flow__handle {
+  opacity: 0 !important;
+}
+
+.connecting .react-flow__handle {
+  opacity: 1 !important;
+}
+
+.react-flow__node:hover .react-flow__handle {
+  opacity: 1 !important;
+}

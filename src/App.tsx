@@ -31,7 +31,7 @@ const initialNodes: Node[] = [
     id: 'p1',
     type: 'place',
     position: { x: 100, y: 100 },
-    data: { label: 'P1', tokens: 0 },  // added tokens
+    data: { label: 'P1', tokens: 0 },
   },
   {
     id: 't1',
@@ -46,8 +46,8 @@ const initialEdges: Edge[] = [
     id: 'e1',
     source: 'p1',
     target: 't1',
-    sourceHandle: 'right',
-    targetHandle: 'left',
+    sourceHandle: 'e',
+    targetHandle: 'w',
     markerEnd: { type: MarkerType.ArrowClosed },
   },
 ];
@@ -98,22 +98,34 @@ function App() {
       const sourceNode = nodes.find((node) => node.id === connection.source);
       const targetNode = nodes.find((node) => node.id === connection.target);
 
-      const isValid =
+      const isValidType =
         (sourceNode?.type === 'place' && targetNode?.type === 'transition') ||
         (sourceNode?.type === 'transition' && targetNode?.type === 'place');
 
-      if (!isValid) {
-        alert('Invalid connection: only place ↔ transition is allowed');
+      if (!isValidType) {
+        alert('Invalid connection: only place → transition or transition → place is allowed');
+        return;
+      }
+
+      const isDuplicate = edgesRef.current.some(
+        (e) => e.source === connection.source && e.target === connection.target
+      );
+
+      if (isDuplicate) {
+        alert('An arc between these two elements already exists');
         return;
       }
 
       setEdges((currentEdges) => addEdge(
-        { ...connection, markerEnd: { type: MarkerType.ArrowClosed } },
+        {
+          ...connection,
+          markerEnd: { type: MarkerType.ArrowClosed}
+        },
         currentEdges
       ));
       setTimeout(() => saveSnapshot(), 0);
     },
-    [nodes, setEdges]
+    [nodes, setEdges, saveSnapshot]
   );
 
   const onNodeClick = useCallback(
@@ -162,7 +174,7 @@ function App() {
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (isConnecting.current) return;
-      setSelectedNode(null); // deselect on canvas click
+      setSelectedNode(null);
       setSelectedEdge(null);
       if (selectedTool !== 'place' && selectedTool !== 'transition') return;
       if (!reactFlowWrapper.current || !reactFlowInstance.current) return;
@@ -202,7 +214,7 @@ function App() {
         setTimeout(() => saveSnapshot(), 0);
       }
     },
-    [nodes, selectedTool, setNodes]
+    [nodes, selectedTool, setNodes, saveSnapshot]
   );
 
   useEffect(() => {
@@ -266,10 +278,12 @@ function App() {
         onConnect={onConnect}
         onConnectStart={() => {
           isConnecting.current = true;
+          reactFlowWrapper.current?.classList.add('connecting');
         }}
         onConnectEnd={() => {
           setTimeout(() => {
             isConnecting.current = false;
+            reactFlowWrapper.current?.classList.remove('connecting');
           }, 0);
         }}
         onPaneClick={onPaneClick}
