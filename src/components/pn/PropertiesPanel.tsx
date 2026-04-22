@@ -1,5 +1,5 @@
 import type { Node } from '@xyflow/react';
-import type { PlaceData, TransitionData } from '../types/petrinet';
+import type { PlaceData, TransitionData } from '../../types/petrinet';
 
 interface PropertiesPanelProps {
   node: Node | null;

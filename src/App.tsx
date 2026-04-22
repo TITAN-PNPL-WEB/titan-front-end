@@ -15,42 +15,22 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import PlaceNode from './components/nodes/PlaceNode';
-import TransitionNode from './components/nodes/TransitionNode';
+import PlaceNode from './components/pn/PlaceNode';
+import TransitionNode from './components/pn/TransitionNode';
 import Toolbar from './components/Toolbar';
+import PetriNetToolbar from './components/pn/PetriNetToolbar';
 import type { ToolType } from './types/petrinet';
-import PropertiesPanel from './components/PropertiesPanel';
+import PropertiesPanel from './components/pn/PropertiesPanel';
+import FeatureModelPanel from './components/fm/FeatureModelPanel';
 
 const nodeTypes = {
   place: PlaceNode,
   transition: TransitionNode,
 };
 
-const initialNodes: Node[] = [
-  {
-    id: 'p1',
-    type: 'place',
-    position: { x: 100, y: 100 },
-    data: { label: 'P1', tokens: 0 },
-  },
-  {
-    id: 't1',
-    type: 'transition',
-    position: { x: 300, y: 100 },
-    data: { label: 'T1' },
-  },
-];
+const initialNodes: Node[] = [];
 
-const initialEdges: Edge[] = [
-  {
-    id: 'e1',
-    source: 'p1',
-    target: 't1',
-    sourceHandle: 'e',
-    targetHandle: 'w',
-    markerEnd: { type: MarkerType.ArrowClosed },
-  },
-];
+const initialEdges: Edge[] = [];
 
 function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -119,7 +99,7 @@ function App() {
       setEdges((currentEdges) => addEdge(
         {
           ...connection,
-          markerEnd: { type: MarkerType.ArrowClosed}
+          markerEnd: { type: MarkerType.ArrowClosed }
         },
         currentEdges
       ));
@@ -152,9 +132,15 @@ function App() {
   }, [selectedNode, selectedEdge, setNodes, setEdges, saveSnapshot]);
 
   const onLabelChange = useCallback((id: string, label: string) => {
+    const node = nodes.find((n) => n.id === id);
+    const duplicate = nodes.some((n) => n.id !== id && n.type === node?.type && n.data.label === label);
+    if (duplicate) {
+      alert(`A ${node?.type} named "${label}" already exists`);
+      return;
+    }
     setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, label } } : n));
     setSelectedNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, label } } : prev);
-  }, [setNodes]);
+  }, [nodes, setNodes]);
 
   const onTokensChange = useCallback((id: string, tokens: number) => {
     setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, tokens } } : n));
@@ -219,6 +205,8 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT') return;
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -235,70 +223,104 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, deleteSelected]);
 
+  const [splitPos, setSplitPos] = useState(50); // percentage
+  const isDragging = useRef(false);
+
+  const onDividerMouseDown = useCallback(() => {
+    isDragging.current = true;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const pct = (e.clientX / window.innerWidth) * 100;
+      setSplitPos(Math.min(Math.max(pct, 20), 80));
+      setTimeout(() => reactFlowInstance.current?.fitView(), 0);
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, []);
+
   return (
-    <div ref={reactFlowWrapper} style={{ width: '100vw', height: '100vh', boxSizing: 'border-box', paddingTop: 48 }}>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Title */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 10,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 20,
-          fontSize: 20,
-          fontWeight: 'bold',
-        }}
-      >
-        Test PN
+      <Toolbar />
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Petri Net panel */}
+        <div style={{ width: `${splitPos}%`, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 13, fontWeight: 'bold', borderBottom: '1px solid #ddd', background: '#fff' }}>
+            Petri Net
+          </div>
+          <PetriNetToolbar
+            activeTool={selectedTool}
+            onToolChange={setSelectedTool}
+            onUndo={undo}
+            onRedo={redo}
+            onDelete={deleteSelected}
+            isEmpty={nodes.length === 0}
+          />
+          <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
+            <PropertiesPanel
+              node={selectedNode}
+              onLabelChange={onLabelChange}
+              onTokensChange={onTokensChange}
+            />
+            <ReactFlow
+              style={{ background: '#f5f5f5' }}
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectStart={() => {
+                isConnecting.current = true;
+                reactFlowWrapper.current?.classList.add('connecting');
+              }}
+              onConnectEnd={() => {
+                setTimeout(() => {
+                  isConnecting.current = false;
+                  reactFlowWrapper.current?.classList.remove('connecting');
+                }, 0);
+              }}
+              onPaneClick={onPaneClick}
+              onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
+              onInit={(instance) => { reactFlowInstance.current = instance; }}
+              fitView
+              fitViewOptions={{ maxZoom: 1 }}
+              connectionMode={ConnectionMode.Loose}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#ccc" />
+              <Controls showInteractive={false} />
+            </ReactFlow>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div
+          onMouseDown={onDividerMouseDown}
+          style={{ width: 4, background: '#ccc', cursor: 'col-resize', flexShrink: 0 }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#999')}
+          onMouseLeave={e => (e.currentTarget.style.background = '#ccc')}
+        />
+
+        {/* Feature Model panel */}
+        <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 13, fontWeight: 'bold', borderBottom: '1px solid #ddd', background: '#fff' }}>
+            Feature Model
+          </div>
+          <FeatureModelPanel />
+        </div>
+
       </div>
-
-      {/* Toolbar */}
-      <Toolbar
-        activeTool={selectedTool}
-        onToolChange={setSelectedTool}
-        onUndo={undo}
-        onRedo={redo}
-        onDelete={deleteSelected}
-      />
-
-      <PropertiesPanel
-        node={selectedNode}
-        onLabelChange={onLabelChange}
-        onTokensChange={onTokensChange}
-      />
-
-      <ReactFlow
-        style={{ background: '#f5f5f5' }}
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onConnectStart={() => {
-          isConnecting.current = true;
-          reactFlowWrapper.current?.classList.add('connecting');
-        }}
-        onConnectEnd={() => {
-          setTimeout(() => {
-            isConnecting.current = false;
-            reactFlowWrapper.current?.classList.remove('connecting');
-          }, 0);
-        }}
-        onPaneClick={onPaneClick}
-        onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
-        onInit={(instance) => {
-          reactFlowInstance.current = instance;
-        }}
-        fitView
-        fitViewOptions={{ maxZoom: 1 }}
-        connectionMode={ConnectionMode.Loose}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#ccc" />
-        <Controls showInteractive={false} />
-      </ReactFlow>
     </div>
   );
 }
