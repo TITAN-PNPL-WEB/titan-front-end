@@ -228,16 +228,18 @@ function App() {
 
   const onDividerMouseDown = useCallback(() => {
     isDragging.current = true;
+    document.body.classList.add('dragging-divider');
 
     const onMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
+      e.preventDefault();
       const pct = (e.clientX / window.innerWidth) * 100;
       setSplitPos(Math.min(Math.max(pct, 20), 80));
-      setTimeout(() => reactFlowInstance.current?.fitView(), 0);
     };
 
     const onMouseUp = () => {
       isDragging.current = false;
+      document.body.classList.remove('dragging-divider');
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -307,7 +309,7 @@ function App() {
         {/* Divider */}
         <div
           onMouseDown={onDividerMouseDown}
-          style={{ width: 4, background: '#ccc', cursor: 'col-resize', flexShrink: 0 }}
+          style={{ width: 4, background: '#ccc', cursor: 'col-resize', flexShrink: 0, userSelect: 'none' }}
           onMouseEnter={e => (e.currentTarget.style.background = '#999')}
           onMouseLeave={e => (e.currentTarget.style.background = '#ccc')}
         />

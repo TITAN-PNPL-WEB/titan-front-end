@@ -163,3 +163,7 @@ button {
   opacity: 0.4;
   cursor: default;
 }
+
+.dragging-divider {
+  user-select: none;
+}

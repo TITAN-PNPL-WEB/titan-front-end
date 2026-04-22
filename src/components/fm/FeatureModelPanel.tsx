@@ -162,12 +162,12 @@ export default function FeatureModelPanel() {
 
     const toggleAbstract = useCallback(() => {
         if (!selectedNode) return;
-        const newMandatory = !selectedNode.data.mandatory;
+        const newAbstract = !selectedNode.data.abstract;
         const newNodes = nodes.map((n) =>
-            n.id === selectedNode.id ? { ...n, data: { ...n.data, mandatory: newMandatory } } : n
+            n.id === selectedNode.id ? { ...n, data: { ...n.data, abstract: newAbstract } } : n
         );
         setNodes(newNodes);
-        setSelectedNode((prev) => prev ? { ...prev, data: { ...prev.data, mandatory: newMandatory } } : prev);
+        setSelectedNode((prev) => prev ? { ...prev, data: { ...prev.data, abstract: newAbstract } } : prev);
         saveFmSnapshot(newNodes, edges);
     }, [selectedNode, nodes, edges, setNodes, saveFmSnapshot]);
 
@@ -240,26 +240,43 @@ export default function FeatureModelPanel() {
         if (!selectedNode) return;
         const newNodes = nodes.filter((n) => n.id !== selectedNode.id);
         const newEdges = edges.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id);
-        relayout(newNodes, newEdges);
-        setEdges(newEdges);
+        if (newNodes.length === 0) {
+            setNodes([]);
+            setEdges([]);
+        } else {
+            relayout(newNodes, newEdges);
+            setEdges(newEdges);
+        }
         setSelectedNode(null);
         saveFmSnapshot(newNodes, newEdges);
-    }, [selectedNode, nodes, edges, relayout, setEdges]);
+    }, [selectedNode, nodes, edges, relayout, setNodes, setEdges, saveFmSnapshot]);
 
     const undoFm = useCallback(() => {
         if (fmHistoryIndex.current === 0) return;
         fmHistoryIndex.current -= 1;
         const snapshot = fmHistory.current[fmHistoryIndex.current];
-        setNodes(snapshot.nodes);
-        setEdges(snapshot.edges);
+        if (snapshot.nodes.length === 0) {
+            setNodes([]);
+            setEdges([]);
+        } else {
+            const laid = applyDagreLayout(snapshot.nodes, snapshot.edges);
+            setNodes(laid);
+            setEdges(snapshot.edges);
+        }
     }, [setNodes, setEdges]);
 
     const redoFm = useCallback(() => {
         if (fmHistoryIndex.current === fmHistory.current.length - 1) return;
         fmHistoryIndex.current += 1;
         const snapshot = fmHistory.current[fmHistoryIndex.current];
-        setNodes(snapshot.nodes);
-        setEdges(snapshot.edges);
+        if (snapshot.nodes.length === 0) {
+            setNodes([]);
+            setEdges([]);
+        } else {
+            const laid = applyDagreLayout(snapshot.nodes, snapshot.edges);
+            setNodes(laid);
+            setEdges(snapshot.edges);
+        }
     }, [setNodes, setEdges]);
 
     useEffect(() => {
@@ -390,6 +407,7 @@ export default function FeatureModelPanel() {
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}
                     fitView
+                    fitViewOptions={{ maxZoom: 0.8 }}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#ccc" />
                     <Controls showInteractive={false} />
