@@ -6,7 +6,9 @@ interface PetriNetToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   onDelete: () => void;
-  isEmpty: boolean;
+  onAddPC: () => void;
+  noNodes: boolean;
+  hasSelection: boolean;
 }
 
 const tools: { type: ToolType; icon: string; label: string }[] = [
@@ -15,7 +17,7 @@ const tools: { type: ToolType; icon: string; label: string }[] = [
   { type: 'transition', icon: '▬', label: 'Transition' },
 ];
 
-export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRedo, onDelete, isEmpty }: PetriNetToolbarProps) {
+export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRedo, onDelete, onAddPC, noNodes, hasSelection }: PetriNetToolbarProps) {
   return (
     <div className="fm-toolbar" style={{
       display: 'flex', gap: 6, padding: '6px 12px',
@@ -26,7 +28,7 @@ export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRe
         <button
           key={tool.type}
           onClick={() => onToolChange(tool.type)}
-          disabled={tool.type === 'select' && isEmpty}
+          disabled={tool.type === 'select' && noNodes}
           style={{
             background: activeTool === tool.type ? '#1a1a1a' : '#fff',
             color: activeTool === tool.type ? '#fff' : '#333',
@@ -38,7 +40,8 @@ export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRe
 
       <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
 
-      <button onClick={onDelete} disabled={isEmpty}>✕ Delete</button>
+      <button onClick={onDelete} disabled={!hasSelection}>✕ Delete</button>
+      <button onClick={onAddPC} disabled={!hasSelection}>+ Add PC</button>
 
       <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
 

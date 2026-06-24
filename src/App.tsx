@@ -13,15 +13,19 @@ import {
   type Edge,
   type Connection,
   type ReactFlowInstance,
+  type OnSelectionChangeParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import PlaceNode from './components/pn/PlaceNode';
 import TransitionNode from './components/pn/TransitionNode';
 import Toolbar from './components/Toolbar';
 import PetriNetToolbar from './components/pn/PetriNetToolbar';
-import type { ToolType } from './types/petrinet';
+import type { ToolType, PNSelectedElement, PresenceCondition } from './types/petrinet';
+import type { Constraint } from './types/featuremodel';
+import type { FMFeature } from './components/fm/ConstraintBuilder';
 import PropertiesPanel from './components/pn/PropertiesPanel';
 import FeatureModelPanel from './components/fm/FeatureModelPanel';
+import PresenceConditionModal from './components/pn/PresenceConditionModal';
 
 const nodeTypes = {
   place: PlaceNode,
@@ -29,27 +33,34 @@ const nodeTypes = {
 };
 
 const initialNodes: Node[] = [];
-
 const initialEdges: Edge[] = [];
 
 function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [pnSelection, setPnSelection] = useState<PNSelectedElement[]>([]);
+  const [propertiesNode, setPropertiesNode] = useState<Node | null>(null);
+  const [propertiesEdge, setPropertiesEdge] = useState<Edge | null>(null);
+  const [pcModalOpen, setPcModalOpen] = useState(false);
+  const [pcElements, setPcElements] = useState<PNSelectedElement[]>([]);
+  const [presenceConditions, setPresenceConditions] = useState<PresenceCondition[]>([]);
+  const [fmFeatures, setFmFeatures] = useState<FMFeature[]>([]);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
   const isConnecting = useRef(false);
+  const arcCounter = useRef(0);
   const history = useRef<{ nodes: Node[]; edges: Edge[] }[]>([{ nodes: initialNodes, edges: initialEdges }]);
   const historyIndex = useRef(0);
+  const selectedToolRef = useRef(selectedTool);
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+  useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
 
   const saveSnapshot = useCallback(() => {
     history.current = history.current.slice(0, historyIndex.current + 1);
@@ -96,10 +107,20 @@ function App() {
         return;
       }
 
+      let arcLabel: string;
+      do {
+        arcLabel = `arc${++arcCounter.current}`;
+      } while (edgesRef.current.some(e => (e.data?.label as string) === arcLabel));
       setEdges((currentEdges) => addEdge(
         {
           ...connection,
-          markerEnd: { type: MarkerType.ArrowClosed }
+          label: arcLabel,
+          labelStyle: { fontSize: 11 },
+          labelBgStyle: { fill: '#fff', fillOpacity: 0.85 },
+          labelBgPadding: [4, 4] as [number, number],
+          labelBgBorderRadius: 3,
+          data: { label: arcLabel },
+          markerEnd: { type: MarkerType.ArrowClosed },
         },
         currentEdges
       ));
@@ -108,28 +129,67 @@ function App() {
     [nodes, setEdges, saveSnapshot]
   );
 
-  const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      if (selectedTool === 'select') {
-        setSelectedNode(node);
-        setSelectedEdge(null);
-      }
-    },
-    [selectedTool]
-  );
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (selectedToolRef.current !== 'select') return;
+    setPropertiesNode(node);
+    setPropertiesEdge(null);
+    setPnSelection([{
+      id: node.id,
+      elementType: node.type as 'place' | 'transition',
+      label: (node.data.label as string) ?? '',
+    }]);
+  }, []);
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    if (selectedToolRef.current !== 'select') return;
+    setPropertiesNode(null);
+    setPropertiesEdge(edge);
+    setPnSelection([{ id: edge.id, elementType: 'arc', label: (edge.data?.label as string) ?? '' }]);
+  }, []);
+
+  const onSelectionChange = useCallback(({ nodes: selNodes, edges: selEdges }: OnSelectionChangeParams) => {
+    if (isConnecting.current) return;
+    if (selectedToolRef.current !== 'select') return;
+
+    const total = selNodes.length + selEdges.length;
+    if (total === 0) {
+      setPnSelection([]);
+      setPropertiesNode(null);
+      setPropertiesEdge(null);
+      return;
+    }
+    if (total === 1) return;
+
+    const elements: PNSelectedElement[] = [
+      ...selNodes.map(n => ({
+        id: n.id,
+        elementType: n.type as 'place' | 'transition',
+        label: (n.data.label as string) ?? '',
+      })),
+      ...selEdges.map(e => ({
+        id: e.id,
+        elementType: 'arc' as const,
+        label: (e.data?.label as string) ?? '',
+      })),
+    ];
+    setPnSelection(elements);
+    setPropertiesNode(null);
+  }, []);
 
   const deleteSelected = useCallback(() => {
-    if (selectedNode) {
-      setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
-      setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
-      setSelectedNode(null);
-      setTimeout(() => saveSnapshot(), 0);
-    } else if (selectedEdge) {
-      setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
-      setSelectedEdge(null);
-      setTimeout(() => saveSnapshot(), 0);
-    }
-  }, [selectedNode, selectedEdge, setNodes, setEdges, saveSnapshot]);
+    if (pnSelection.length === 0) return;
+    const nodeIds = new Set(pnSelection.filter(e => e.elementType !== 'arc').map(e => e.id));
+    const edgeIds = new Set(pnSelection.filter(e => e.elementType === 'arc').map(e => e.id));
+    setNodes(nds => nds.filter(n => !nodeIds.has(n.id)));
+    setEdges(eds => eds.filter(e =>
+      !edgeIds.has(e.id) &&
+      !nodeIds.has(e.source) &&
+      !nodeIds.has(e.target)
+    ));
+    setPnSelection([]);
+    setPropertiesNode(null);
+    setTimeout(() => saveSnapshot(), 0);
+  }, [pnSelection, setNodes, setEdges, saveSnapshot]);
 
   const onLabelChange = useCallback((id: string, label: string) => {
     const node = nodes.find((n) => n.id === id);
@@ -139,34 +199,40 @@ function App() {
       return;
     }
     setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, label } } : n));
-    setSelectedNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, label } } : prev);
+    setPropertiesNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, label } } : prev);
   }, [nodes, setNodes]);
+
+  const onEdgeLabelChange = useCallback((id: string, label: string) => {
+    const duplicate = edgesRef.current.some(e => e.id !== id && (e.data?.label as string) === label);
+    if (duplicate) {
+      alert(`An arc named "${label}" already exists`);
+      return;
+    }
+    setEdges(eds => eds.map(e => e.id === id ? { ...e, label, data: { ...e.data, label } } : e));
+    setPropertiesEdge(prev => prev?.id === id ? { ...prev, label, data: { ...prev.data, label } } : prev);
+  }, [setEdges]);
 
   const onTokensChange = useCallback((id: string, tokens: number) => {
     setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, tokens } } : n));
-    setSelectedNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, tokens } } : prev);
+    setPropertiesNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, tokens } } : prev);
   }, [setNodes]);
 
-  const onEdgeClick = useCallback(
-    (_event: React.MouseEvent, edge: Edge) => {
-      if (selectedTool === 'select') {
-        setSelectedEdge(edge);
-        setSelectedNode(null);
-      }
-    },
-    [selectedTool]
-  );
+  const handleConfirmPC = useCallback((expression: Constraint) => {
+    setPresenceConditions(prev => [...prev, {
+      id: `pc-${Date.now()}`,
+      expression,
+      elements: pcElements,
+    }]);
+    setPcModalOpen(false);
+  }, [pcElements]);
 
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (isConnecting.current) return;
-      setSelectedNode(null);
-      setSelectedEdge(null);
       if (selectedTool !== 'place' && selectedTool !== 'transition') return;
       if (!reactFlowWrapper.current || !reactFlowInstance.current) return;
 
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
-
       const position = reactFlowInstance.current.screenToFlowPosition({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
@@ -174,28 +240,24 @@ function App() {
 
       if (selectedTool === 'place') {
         const placeCount = nodes.filter((node) => node.type === 'place').length + 1;
-
         const newNode: Node = {
           id: `p${Date.now()}`,
           type: 'place',
           position,
           data: { label: `P${placeCount}`, tokens: 0 },
         };
-
         setNodes((currentNodes) => [...currentNodes, newNode]);
         setTimeout(() => saveSnapshot(), 0);
       }
 
       if (selectedTool === 'transition') {
         const transitionCount = nodes.filter((node) => node.type === 'transition').length + 1;
-
         const newNode: Node = {
           id: `t${Date.now()}`,
           type: 'transition',
           position,
           data: { label: `T${transitionCount}` },
         };
-
         setNodes((currentNodes) => [...currentNodes, newNode]);
         setTimeout(() => saveSnapshot(), 0);
       }
@@ -206,7 +268,8 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT') return;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (pcModalOpen) return;
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -221,9 +284,9 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, deleteSelected]);
+  }, [undo, redo, deleteSelected, pcModalOpen]);
 
-  const [splitPos, setSplitPos] = useState(50); // percentage
+  const [splitPos, setSplitPos] = useState(50);
   const isDragging = useRef(false);
 
   const onDividerMouseDown = useCallback(() => {
@@ -266,12 +329,16 @@ function App() {
             onUndo={undo}
             onRedo={redo}
             onDelete={deleteSelected}
-            isEmpty={nodes.length === 0}
+            onAddPC={() => { setPcElements([...pnSelection]); setPcModalOpen(true); }}
+            noNodes={nodes.length === 0}
+            hasSelection={pnSelection.length > 0}
           />
           <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
             <PropertiesPanel
-              node={selectedNode}
+              node={propertiesNode}
+              edge={propertiesEdge}
               onLabelChange={onLabelChange}
+              onEdgeLabelChange={onEdgeLabelChange}
               onTokensChange={onTokensChange}
             />
             <ReactFlow
@@ -295,7 +362,9 @@ function App() {
               onPaneClick={onPaneClick}
               onNodeClick={onNodeClick}
               onEdgeClick={onEdgeClick}
+              onSelectionChange={onSelectionChange}
               onInit={(instance) => { reactFlowInstance.current = instance; }}
+              deleteKeyCode={null}
               fitView
               fitViewOptions={{ maxZoom: 1 }}
               connectionMode={ConnectionMode.Loose}
@@ -319,10 +388,19 @@ function App() {
           <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 13, fontWeight: 'bold', borderBottom: '1px solid #ddd', background: '#fff' }}>
             Feature Model
           </div>
-          <FeatureModelPanel />
+          <FeatureModelPanel onFeaturesChange={setFmFeatures} />
         </div>
 
       </div>
+
+      {pcModalOpen && (
+        <PresenceConditionModal
+          elements={pcElements}
+          fmFeatures={fmFeatures}
+          onConfirm={handleConfirmPC}
+          onCancel={() => setPcModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

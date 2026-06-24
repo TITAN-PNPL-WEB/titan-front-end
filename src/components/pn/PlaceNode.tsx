@@ -16,14 +16,14 @@ const HANDLE_ANGLES = [
   { id: 'nw', deg: -135, position: Position.Top },
 ];
 
-function PlaceNode({ data }: { data: PlaceData }) {
+function PlaceNode({ data, selected }: { data: PlaceData; selected: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{
         width: 50,
         height: 50,
         borderRadius: '50%',
-        border: '2px solid black',
+        border: selected ? '2.5px solid #1a73e8' : '2px solid black',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

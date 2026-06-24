@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
     ReactFlow,
     Background,
@@ -13,6 +13,10 @@ import {
 import dagre from 'dagre';
 import FeatureNode from './FeatureNode';
 import GroupEdge from './GroupEdge';
+import { validateFeatureModel } from '../../utils/fm/validateFeatureModel';
+import ConstraintBuilder, { constraintToString, type FMFeature } from './ConstraintBuilder';
+import type { Constraint } from '../../types/featuremodel';
+import { EMPTY_CONSTRAINT } from '../../types/featuremodel';
 
 const nodeTypes = { feature: FeatureNode };
 const edgeTypes = { group: GroupEdge };
@@ -27,18 +31,8 @@ interface FeatureData extends Record<string, unknown> {
     mandatory?: boolean;
 }
 
-type ConstraintOperator = '∧' | '∨';
-
-interface ConstraintTerm {
-    id: string;
-    type: 'feature' | 'requires' | 'excludes';
-    sourceId: string;
-    targetId?: string;
-}
-
-interface Constraint {
-    terms: ConstraintTerm[];
-    operators: ConstraintOperator[];
+interface Props {
+    onFeaturesChange?: (features: FMFeature[]) => void;
 }
 
 function applyDagreLayout(nodes: Node<FeatureData>[], edges: Edge[]): Node<FeatureData>[] {
@@ -54,30 +48,33 @@ function applyDagreLayout(nodes: Node<FeatureData>[], edges: Edge[]): Node<Featu
     });
 }
 
-export default function FeatureModelPanel() {
+export default function FeatureModelPanel({ onFeaturesChange }: Props) {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<FeatureData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [selectedNode, setSelectedNode] = useState<Node<FeatureData> | null>(null);
-
-    const [constraint, setConstraint] = useState<Constraint>({ terms: [], operators: [] });
-    const [addingTerm, setAddingTerm] = useState(false);
-    const [termType, setTermType] = useState<'feature' | 'requires' | 'excludes'>('feature');
-    const [termSource, setTermSource] = useState('');
-    const [termTarget, setTermTarget] = useState('');
-    const [pendingOperator, setPendingOperator] = useState<ConstraintOperator>('∧');
+    const [constraint, setConstraint] = useState<Constraint>(EMPTY_CONSTRAINT);
     const [savedConstraints, setSavedConstraints] = useState<Constraint[]>([]);
 
     const fmHistory = useRef<{ nodes: Node<FeatureData>[]; edges: Edge[] }[]>([{ nodes: [], edges: [] }]);
     const fmHistoryIndex = useRef(0);
+    const featureCounter = useRef(0);
     const nodesRef = useRef(nodes);
     const edgesRef = useRef(edges);
+
+    const featuresList = useMemo(
+        () => nodes.filter(n => !n.data.root).map(n => ({ id: n.id, label: n.data.label })),
+        [nodes]
+    );
+
+    useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+    useEffect(() => { edgesRef.current = edges; }, [edges]);
+    useEffect(() => { onFeaturesChange?.(featuresList); }, [featuresList, onFeaturesChange]);
 
     const relayout = useCallback((newNodes: Node<FeatureData>[], newEdges: Edge[]) => {
         if (newNodes.length === 0) return;
         const laid = applyDagreLayout(newNodes, newEdges);
         setNodes(laid);
     }, [setNodes]);
-
 
     const saveFmSnapshot = useCallback((newNodes: Node<FeatureData>[], newEdges: Edge[]) => {
         fmHistory.current = fmHistory.current.slice(0, fmHistoryIndex.current + 1);
@@ -100,7 +97,7 @@ export default function FeatureModelPanel() {
         relayout(newNodes, edges);
         setEdges(edges);
         saveFmSnapshot(newNodes, edges);
-    }, [nodes, edges, relayout, setEdges]);
+    }, [nodes, edges, relayout, setEdges, saveFmSnapshot]);
 
     const addChild = useCallback(() => {
         if (!selectedNode) {
@@ -111,7 +108,7 @@ export default function FeatureModelPanel() {
             id: `f${Date.now()}`,
             type: 'feature',
             position: { x: 0, y: 0 },
-            data: { label: 'Feature', abstract: false, root: false },
+            data: { label: `Feature${++featureCounter.current}`, abstract: false, root: false },
         };
         const newEdge: Edge = {
             id: `fe${Date.now()}`,
@@ -125,7 +122,7 @@ export default function FeatureModelPanel() {
         relayout(newNodes, newEdges);
         setEdges(newEdges);
         saveFmSnapshot(newNodes, newEdges);
-    }, [selectedNode, nodes, edges, relayout, setEdges]);
+    }, [selectedNode, nodes, edges, relayout, setEdges, saveFmSnapshot]);
 
     const addGroup = useCallback((groupType: 'or' | 'xor') => {
         if (!selectedNode) {
@@ -136,8 +133,8 @@ export default function FeatureModelPanel() {
         const id2 = `f${Date.now() + 1}`;
         const newNodes: Node<FeatureData>[] = [
             ...nodes,
-            { id: id1, type: 'feature', position: { x: 0, y: 0 }, data: { label: 'Feature', abstract: false, root: false } },
-            { id: id2, type: 'feature', position: { x: 0, y: 0 }, data: { label: 'Feature', abstract: false, root: false } },
+            { id: id1, type: 'feature', position: { x: 0, y: 0 }, data: { label: `Feature${++featureCounter.current}`, abstract: false, root: false } },
+            { id: id2, type: 'feature', position: { x: 0, y: 0 }, data: { label: `Feature${++featureCounter.current}`, abstract: false, root: false } },
         ];
         const newEdges: Edge[] = [
             ...edges,
@@ -147,7 +144,7 @@ export default function FeatureModelPanel() {
         relayout(newNodes, newEdges);
         setEdges(newEdges);
         saveFmSnapshot(newNodes, newEdges);
-    }, [selectedNode, nodes, edges, relayout, setEdges]);
+    }, [selectedNode, nodes, edges, relayout, setEdges, saveFmSnapshot]);
 
     const toggleMandatory = useCallback(() => {
         if (!selectedNode) return;
@@ -171,48 +168,11 @@ export default function FeatureModelPanel() {
         saveFmSnapshot(newNodes, edges);
     }, [selectedNode, nodes, edges, setNodes, saveFmSnapshot]);
 
-    const addTerm = useCallback(() => {
-        if (!termSource) return;
-        if ((termType === 'requires' || termType === 'excludes') && !termTarget) return;
-        if (termSource === termTarget) {
-            alert('Source and target must be different');
-            return;
-        }
-        const newTerm: ConstraintTerm = {
-            id: `t${Date.now()}`,
-            type: termType,
-            sourceId: termSource,
-            targetId: termTarget || undefined,
-        };
-        setConstraint((prev) => ({
-            terms: [...prev.terms, newTerm],
-            operators: prev.terms.length > 0 ? [...prev.operators, pendingOperator] : prev.operators,
-        }));
-        setAddingTerm(false);
-        setTermSource('');
-        setTermTarget('');
-    }, [termType, termSource, termTarget, pendingOperator]);
-
     const saveConstraint = useCallback(() => {
         if (constraint.terms.length === 0) return;
         setSavedConstraints((prev) => [...prev, constraint]);
-        setConstraint({ terms: [], operators: [] });
+        setConstraint(EMPTY_CONSTRAINT);
     }, [constraint]);
-
-    const termLabel = (term: ConstraintTerm) => {
-        const src = nodes.find((n) => n.id === term.sourceId)?.data.label ?? '';
-        const tgt = nodes.find((n) => n.id === term.targetId)?.data.label ?? '';
-        if (term.type === 'feature') return src;
-        if (term.type === 'requires') return `${src} ⇒ ${tgt}`;
-        return `${src} excludes ${tgt}`;
-    };
-
-    const constraintLabel = (c: Constraint) =>
-        c.terms.map((t, i) => {
-            const label = termLabel(t);
-            const wrapped = c.terms.length > 1 ? `(${label})` : label;
-            return i === 0 ? wrapped : ` ${c.operators[i - 1]} ${wrapped}`;
-        }).join('');
 
     const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
         setSelectedNode(node as Node<FeatureData>);
@@ -225,7 +185,7 @@ export default function FeatureModelPanel() {
     useEffect(() => {
         const handler = (e: Event) => {
             const { id, label } = (e as CustomEvent).detail;
-            const duplicate = nodes.some((n) => n.id !== id && n.data.label === label);
+            const duplicate = nodesRef.current.some((n) => n.id !== id && n.data.label === label);
             if (duplicate) {
                 alert(`A feature named "${label}" already exists`);
                 return;
@@ -234,7 +194,7 @@ export default function FeatureModelPanel() {
         };
         window.addEventListener('feature-label-change', handler);
         return () => window.removeEventListener('feature-label-change', handler);
-    }, [setNodes, nodes]);
+    }, [setNodes]);
 
     const deleteSelected = useCallback(() => {
         if (!selectedNode) return;
@@ -283,9 +243,7 @@ export default function FeatureModelPanel() {
         const handler = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
             if (target.tagName === 'INPUT') return;
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                deleteSelected();
-            }
+            if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
@@ -308,8 +266,10 @@ export default function FeatureModelPanel() {
         return () => window.removeEventListener('keydown', handler);
     }, [undoFm, redoFm]);
 
-    useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-    useEffect(() => { edgesRef.current = edges; }, [edges]);
+    const validationErrors = useMemo(
+        () => nodes.length > 0 ? validateFeatureModel(nodes, edges) : [],
+        [nodes, edges]
+    );
 
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -338,58 +298,20 @@ export default function FeatureModelPanel() {
                 )}
 
                 <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
-                <button onClick={() => setAddingTerm(true)} disabled={nodes.length === 0}>Add Constraint Term</button>
-                {constraint.terms.length > 0 && (
-                    <button onClick={saveConstraint}>Save Constraint</button>
-                )}
-                <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
                 <button onClick={deleteSelected} disabled={!selectedNode}>Delete</button>
                 <button onClick={undoFm}>Undo</button>
                 <button onClick={redoFm}>Redo</button>
             </div>
 
-            {/* Constraint form */}
-            {addingTerm && (
-                <div style={{
-                    display: 'flex', gap: 8, padding: '6px 12px', alignItems: 'center',
-                    borderBottom: '1px solid #ddd', background: '#fff', flexShrink: 0, flexWrap: 'wrap',
-                }}>
+            {/* Constraint builder */}
+            {nodes.length > 0 && (
+                <div style={{ padding: '6px 12px', borderBottom: '1px solid #e0e0e0', background: '#fff', flexShrink: 0 }}>
+                    <ConstraintBuilder features={featuresList} value={constraint} onChange={setConstraint} />
                     {constraint.terms.length > 0 && (
-                        <select value={pendingOperator} onChange={(e) => setPendingOperator(e.target.value as ConstraintOperator)}>
-                            <option value="∧">AND (∧)</option>
-                            <option value="∨">OR (∨)</option>
-                        </select>
+                        <button onClick={saveConstraint} style={{ marginTop: 6, fontSize: 12 }}>
+                            Save Constraint
+                        </button>
                     )}
-                    <select value={termType} onChange={(e) => setTermType(e.target.value as 'feature' | 'requires' | 'excludes')}>
-                        <option value="feature">Feature</option>
-                        <option value="requires">Requires (⇒)</option>
-                        <option value="excludes">Excludes</option>
-                    </select>
-                    <select value={termSource} onChange={(e) => setTermSource(e.target.value)}>
-                        <option value="">Select feature</option>
-                        {nodes.filter((n) => !n.data.root).map((n) => (
-                            <option key={n.id} value={n.id}>{n.data.label}</option>
-                        ))}
-                    </select>
-                    {(termType === 'requires' || termType === 'excludes') && (
-                        <select value={termTarget} onChange={(e) => setTermTarget(e.target.value)}>
-                            <option value="">Select feature B</option>
-                            {nodes.filter((n) => !n.data.root).map((n) => (
-                                <option key={n.id} value={n.id}>{n.data.label}</option>
-                            ))}
-                        </select>
-                    )}
-                    <button onClick={addTerm}>Add</button>
-                    <button onClick={() => setAddingTerm(false)}>Cancel</button>
-                </div>
-            )}
-
-            {constraint.terms.length > 0 && (
-                <div style={{
-                    padding: '4px 16px', borderBottom: '1px solid #ddd',
-                    background: '#f9f9f9', fontSize: 13, color: '#555',
-                }}>
-                    Current: {constraintLabel(constraint)}
                 </div>
             )}
 
@@ -414,15 +336,24 @@ export default function FeatureModelPanel() {
                 </ReactFlow>
             </div>
 
-            {/* Constraints list */}
+            {/* Validation errors */}
+            {validationErrors.length > 0 && (
+                <div style={{ padding: '8px 16px', borderTop: '2px solid #f5a623', background: '#fffbf2', flexShrink: 0 }}>
+                    {validationErrors.map((err) => (
+                        <div key={err.ruleId} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b26200' }}>
+                            <span>⚠</span>
+                            <span>{err.message}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Saved constraints */}
             {savedConstraints.length > 0 && (
-                <div style={{
-                    padding: '8px 16px', borderTop: '1px solid #ddd',
-                    background: '#fff', flexShrink: 0, fontSize: 13,
-                }}>
+                <div style={{ padding: '8px 16px', borderTop: '1px solid #ddd', background: '#fff', flexShrink: 0, fontSize: 13 }}>
                     {savedConstraints.map((c, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                            <span>{constraintLabel(c)}</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{constraintToString(c, featuresList)}</span>
                             <button
                                 onClick={() => setSavedConstraints((prev) => prev.filter((_, j) => j !== i))}
                                 style={{ fontSize: 11, padding: '1px 6px' }}
@@ -433,7 +364,6 @@ export default function FeatureModelPanel() {
                     ))}
                 </div>
             )}
-
         </div>
     );
 }

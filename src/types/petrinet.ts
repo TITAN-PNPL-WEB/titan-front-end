@@ -19,3 +19,21 @@ export interface ArcData {
 
 // --- Editor tools ---
 export type ToolType = 'select' | 'place' | 'transition' | 'delete';
+
+// --- Multi-selection ---
+export type PNElementType = 'place' | 'transition' | 'arc';
+
+export interface PNSelectedElement {
+  id: string;
+  elementType: PNElementType;
+  label: string;
+}
+
+// --- Presence Condition ---
+import type { Constraint } from './featuremodel';
+
+export interface PresenceCondition {
+  id: string;
+  expression: Constraint;
+  elements: PNSelectedElement[];
+}
