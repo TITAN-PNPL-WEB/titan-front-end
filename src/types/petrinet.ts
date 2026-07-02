@@ -34,6 +34,6 @@ import type { Constraint } from './featuremodel';
 
 export interface PresenceCondition {
   id: string;
+  elementIds: string[];
   expression: Constraint;
-  elements: PNSelectedElement[];
 }

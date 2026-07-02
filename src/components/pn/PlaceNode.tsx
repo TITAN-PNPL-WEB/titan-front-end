@@ -16,7 +16,7 @@ const HANDLE_ANGLES = [
   { id: 'nw', deg: -135, position: Position.Top },
 ];
 
-function PlaceNode({ data, selected }: { data: PlaceData; selected: boolean }) {
+function PlaceNode({ data, selected }: { data: PlaceData & { pcLabel?: string }; selected: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{
@@ -57,6 +57,16 @@ function PlaceNode({ data, selected }: { data: PlaceData; selected: boolean }) {
         })}
       </div>
       <span style={{ fontSize: 12, marginTop: 4 }}>{data.label}</span>
+      {data.pcLabel && (
+        <span style={{
+          fontSize: 9, marginTop: 2, fontStyle: 'italic',
+          color: '#6d28d9', background: '#ede9fe',
+          borderRadius: 3, padding: '1px 4px', maxWidth: 80,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          [{data.pcLabel}]
+        </span>
+      )}
     </div>
   );
 }

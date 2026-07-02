@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import type { PNSelectedElement } from '../../types/petrinet';
+import { useState, useEffect, useMemo } from 'react';
+import type { PNSelectedElement, PresenceCondition } from '../../types/petrinet';
 import type { Constraint } from '../../types/featuremodel';
 import { EMPTY_CONSTRAINT } from '../../types/featuremodel';
 import ConstraintBuilder, { constraintToString, type FMFeature } from '../fm/ConstraintBuilder';
+import { validatePresenceCondition } from '../../utils/pn/validatePresenceCondition';
 
 const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   place:      { bg: '#e8f0fe', color: '#1a73e8' },
@@ -13,12 +14,14 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 interface Props {
   elements: PNSelectedElement[];
   fmFeatures: FMFeature[];
+  presenceConditions: PresenceCondition[];
+  initialConstraint?: Constraint;
   onConfirm: (constraint: Constraint) => void;
   onCancel: () => void;
 }
 
-export default function PresenceConditionModal({ elements, fmFeatures, onConfirm, onCancel }: Props) {
-  const [constraint, setConstraint] = useState<Constraint>(EMPTY_CONSTRAINT);
+export default function PresenceConditionModal({ elements, fmFeatures, presenceConditions, initialConstraint, onConfirm, onCancel }: Props) {
+  const [constraint, setConstraint] = useState<Constraint>(initialConstraint ?? EMPTY_CONSTRAINT);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -28,7 +31,16 @@ export default function PresenceConditionModal({ elements, fmFeatures, onConfirm
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel]);
 
-  const canConfirm = constraint.terms.length > 0 && elements.length > 0;
+  const elementIds = useMemo(() => elements.map(e => e.id), [elements]);
+
+  const validationErrors = useMemo(() => validatePresenceCondition({
+    elementIds,
+    expression: constraint,
+    fmFeatures,
+    presenceConditions,
+  }), [elementIds, constraint, fmFeatures, presenceConditions]);
+
+  const canConfirm = validationErrors.length === 0;
 
   return (
     <div
@@ -53,7 +65,9 @@ export default function PresenceConditionModal({ elements, fmFeatures, onConfirm
           gap: 18,
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Add Presence Condition</h3>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          {initialConstraint !== undefined ? 'Edit Presence Condition' : 'Add Presence Condition'}
+        </h3>
 
         {/* Elements list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -84,17 +98,31 @@ export default function PresenceConditionModal({ elements, fmFeatures, onConfirm
           <ConstraintBuilder features={fmFeatures} value={constraint} onChange={setConstraint} />
         </div>
 
-        {/* Confirm preview */}
+        {/* Expression preview */}
         {constraint.terms.length > 0 && (
           <div style={{ fontSize: 12, color: '#555' }}>
             Expression: <span style={{ fontFamily: 'monospace', color: '#1a1a1a' }}>{constraintToString(constraint, fmFeatures)}</span>
           </div>
         )}
 
+        {/* Validation errors */}
+        {validationErrors.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {validationErrors.map(err => (
+              <div
+                key={err.rule}
+                style={{ fontSize: 12, color: '#b26200', background: '#fffbf2', border: '1px solid #f5a623', borderRadius: 4, padding: '5px 10px' }}
+              >
+                {err.message}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button
             onClick={onCancel}
-            style={{ padding: '6px 16px', fontSize: 13, border: '1px solid #d0d0d0', borderRadius: 4, background: '#fff', cursor: 'pointer' }}
+            style={{ padding: '6px 16px', fontSize: 13, border: '1px solid #999', borderRadius: 4, background: '#f5f5f5', color: '#333', cursor: 'pointer' }}
           >
             Cancel
           </button>
@@ -103,7 +131,7 @@ export default function PresenceConditionModal({ elements, fmFeatures, onConfirm
             disabled={!canConfirm}
             style={{ padding: '6px 16px', fontSize: 13, border: 'none', borderRadius: 4, background: canConfirm ? '#1a1a1a' : '#ccc', color: '#fff', cursor: canConfirm ? 'pointer' : 'not-allowed' }}
           >
-            Confirm
+            {initialConstraint !== undefined ? 'Save' : 'Confirm'}
           </button>
         </div>
       </div>

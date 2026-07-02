@@ -12,7 +12,7 @@ const HANDLES = [
   { id: 'nw', x: 0,  y: 0,  position: Position.Top    },
 ];
 
-function TransitionNode({ data, selected }: { data: TransitionData; selected: boolean }) {
+function TransitionNode({ data, selected }: { data: TransitionData & { pcLabel?: string }; selected: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{
@@ -42,6 +42,16 @@ function TransitionNode({ data, selected }: { data: TransitionData; selected: bo
         ))}
       </div>
       <span style={{ fontSize: 12, marginTop: 4 }}>{data.label}</span>
+      {data.pcLabel && (
+        <span style={{
+          fontSize: 9, marginTop: 2, fontStyle: 'italic',
+          color: '#6d28d9', background: '#ede9fe',
+          borderRadius: 3, padding: '1px 4px', maxWidth: 80,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          [{data.pcLabel}]
+        </span>
+      )}
     </div>
   );
 }

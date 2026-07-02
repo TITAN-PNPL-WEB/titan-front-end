@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   addEdge,
@@ -22,10 +22,11 @@ import Toolbar from './components/Toolbar';
 import PetriNetToolbar from './components/pn/PetriNetToolbar';
 import type { ToolType, PNSelectedElement, PresenceCondition } from './types/petrinet';
 import type { Constraint } from './types/featuremodel';
-import type { FMFeature } from './components/fm/ConstraintBuilder';
+import { constraintToString, type FMFeature } from './components/fm/ConstraintBuilder';
 import PropertiesPanel from './components/pn/PropertiesPanel';
 import FeatureModelPanel from './components/fm/FeatureModelPanel';
 import PresenceConditionModal from './components/pn/PresenceConditionModal';
+import { validatePresenceCondition } from './utils/pn/validatePresenceCondition';
 
 const nodeTypes = {
   place: PlaceNode,
@@ -44,6 +45,7 @@ function App() {
   const [propertiesEdge, setPropertiesEdge] = useState<Edge | null>(null);
   const [pcModalOpen, setPcModalOpen] = useState(false);
   const [pcElements, setPcElements] = useState<PNSelectedElement[]>([]);
+  const [editingPcId, setEditingPcId] = useState<string | null>(null);
   const [presenceConditions, setPresenceConditions] = useState<PresenceCondition[]>([]);
   const [fmFeatures, setFmFeatures] = useState<FMFeature[]>([]);
 
@@ -217,14 +219,73 @@ function App() {
     setPropertiesNode((prev) => prev?.id === id ? { ...prev, data: { ...prev.data, tokens } } : prev);
   }, [setNodes]);
 
+  const updatePresenceCondition = useCallback((id: string, updates: Partial<Omit<PresenceCondition, 'id'>>) => {
+    setPresenceConditions(prev => prev.map(pc => pc.id === id ? { ...pc, ...updates } : pc));
+  }, []);
+
+  const removePresenceCondition = useCallback((id: string) => {
+    setPresenceConditions(prev => prev.filter(pc => pc.id !== id));
+  }, []);
+
+  const handleRemovePC = useCallback((pcId: string) => {
+    const pc = presenceConditions.find(p => p.id === pcId);
+    if (!pc) return;
+    if (pc.elementIds.length > 1) {
+      const labels = pc.elementIds.map(id => {
+        const node = nodesRef.current.find(n => n.id === id);
+        if (node) return (node.data.label as string) ?? id;
+        const edge = edgesRef.current.find(e => e.id === id);
+        return (edge?.data?.label as string) ?? id;
+      });
+      const ok = window.confirm(
+        `This presence condition applies to ${pc.elementIds.length} elements: ${labels.join(', ')}.\n\nRemoving it will clear the annotation from all of them. Continue?`
+      );
+      if (!ok) return;
+    }
+    removePresenceCondition(pcId);
+  }, [presenceConditions, removePresenceCondition]);
+
   const handleConfirmPC = useCallback((expression: Constraint) => {
-    setPresenceConditions(prev => [...prev, {
-      id: `pc-${Date.now()}`,
+    const newElementIds = pcElements.map(e => e.id);
+    const errors = validatePresenceCondition({
+      elementIds: newElementIds,
       expression,
-      elements: pcElements,
-    }]);
+      fmFeatures,
+      presenceConditions,
+      editingId: editingPcId ?? undefined,
+      pnNodes: nodesRef.current,
+      pnEdges: edgesRef.current,
+    });
+    if (errors.length > 0) {
+      alert(errors.map(e => e.message).join('\n'));
+      return;
+    }
+    if (editingPcId) {
+      updatePresenceCondition(editingPcId, { expression });
+    } else {
+      setPresenceConditions(prev => [
+        ...prev,
+        { id: `pc-${Date.now()}`, elementIds: newElementIds, expression },
+      ]);
+    }
+    setEditingPcId(null);
     setPcModalOpen(false);
-  }, [pcElements]);
+  }, [pcElements, fmFeatures, presenceConditions, editingPcId, updatePresenceCondition]);
+
+  const handleEditPC = useCallback((pcId: string) => {
+    const pc = presenceConditions.find(p => p.id === pcId);
+    if (!pc) return;
+    const elements: PNSelectedElement[] = pc.elementIds.flatMap((id): PNSelectedElement[] => {
+      const node = nodesRef.current.find(n => n.id === id);
+      if (node) return [{ id: node.id, elementType: node.type as 'place' | 'transition', label: (node.data.label as string) ?? '' }];
+      const edge = edgesRef.current.find(e => e.id === id);
+      if (edge) return [{ id: edge.id, elementType: 'arc' as const, label: (edge.data?.label as string) ?? '' }];
+      return [];
+    });
+    setPcElements(elements);
+    setEditingPcId(pcId);
+    setPcModalOpen(true);
+  }, [presenceConditions]);
 
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
@@ -311,6 +372,32 @@ function App() {
     window.addEventListener('mouseup', onMouseUp);
   }, []);
 
+  const displayNodes = useMemo(() => {
+    const pcMap = new Map<string, string>(
+      presenceConditions.flatMap(pc =>
+        pc.elementIds.map(id => [id, constraintToString(pc.expression, fmFeatures)])
+      )
+    );
+    return nodes.map(n => {
+      const pcLabel = pcMap.get(n.id);
+      return pcLabel ? { ...n, data: { ...n.data, pcLabel } } : n;
+    });
+  }, [nodes, presenceConditions, fmFeatures]);
+
+  const displayEdges = useMemo(() => {
+    const pcMap = new Map<string, string>(
+      presenceConditions.flatMap(pc =>
+        pc.elementIds.map(id => [id, constraintToString(pc.expression, fmFeatures)])
+      )
+    );
+    return edges.map(e => {
+      const pcLabel = pcMap.get(e.id);
+      if (!pcLabel) return e;
+      const arcName = (e.data?.label as string) ?? '';
+      return { ...e, label: `${arcName} [${pcLabel}]` };
+    });
+  }, [edges, presenceConditions, fmFeatures]);
+
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
@@ -340,11 +427,17 @@ function App() {
               onLabelChange={onLabelChange}
               onEdgeLabelChange={onEdgeLabelChange}
               onTokensChange={onTokensChange}
+              presenceConditions={presenceConditions}
+              fmFeatures={fmFeatures}
+              allPnNodes={nodes}
+              allPnEdges={edges}
+              onEditPC={handleEditPC}
+              onRemovePC={handleRemovePC}
             />
             <ReactFlow
               style={{ background: '#f5f5f5' }}
-              nodes={nodes}
-              edges={edges}
+              nodes={displayNodes}
+              edges={displayEdges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
@@ -397,8 +490,10 @@ function App() {
         <PresenceConditionModal
           elements={pcElements}
           fmFeatures={fmFeatures}
+          presenceConditions={presenceConditions}
+          initialConstraint={editingPcId ? presenceConditions.find(p => p.id === editingPcId)?.expression : undefined}
           onConfirm={handleConfirmPC}
-          onCancel={() => setPcModalOpen(false)}
+          onCancel={() => { setEditingPcId(null); setPcModalOpen(false); }}
         />
       )}
     </div>
