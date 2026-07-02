@@ -16,11 +16,12 @@ interface Props {
   fmFeatures: FMFeature[];
   presenceConditions: PresenceCondition[];
   initialConstraint?: Constraint;
+  editingId?: string;
   onConfirm: (constraint: Constraint) => void;
   onCancel: () => void;
 }
 
-export default function PresenceConditionModal({ elements, fmFeatures, presenceConditions, initialConstraint, onConfirm, onCancel }: Props) {
+export default function PresenceConditionModal({ elements, fmFeatures, presenceConditions, initialConstraint, editingId, onConfirm, onCancel }: Props) {
   const [constraint, setConstraint] = useState<Constraint>(initialConstraint ?? EMPTY_CONSTRAINT);
 
   useEffect(() => {
@@ -33,12 +34,19 @@ export default function PresenceConditionModal({ elements, fmFeatures, presenceC
 
   const elementIds = useMemo(() => elements.map(e => e.id), [elements]);
 
+  const elementLabels = useMemo(
+    () => Object.fromEntries(elements.map(e => [e.id, e.label || e.id])),
+    [elements]
+  );
+
   const validationErrors = useMemo(() => validatePresenceCondition({
     elementIds,
     expression: constraint,
     fmFeatures,
     presenceConditions,
-  }), [elementIds, constraint, fmFeatures, presenceConditions]);
+    editingId,
+    elementLabels,
+  }), [elementIds, constraint, fmFeatures, presenceConditions, editingId, elementLabels]);
 
   const canConfirm = validationErrors.length === 0;
 

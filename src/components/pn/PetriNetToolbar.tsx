@@ -7,6 +7,8 @@ interface PetriNetToolbarProps {
   onRedo: () => void;
   onDelete: () => void;
   onAddPC: () => void;
+  showPCLabels: boolean;
+  onTogglePCLabels: () => void;
   noNodes: boolean;
   hasSelection: boolean;
 }
@@ -17,7 +19,7 @@ const tools: { type: ToolType; icon: string; label: string }[] = [
   { type: 'transition', icon: '▬', label: 'Transition' },
 ];
 
-export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRedo, onDelete, onAddPC, noNodes, hasSelection }: PetriNetToolbarProps) {
+export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRedo, onDelete, onAddPC, showPCLabels, onTogglePCLabels, noNodes, hasSelection }: PetriNetToolbarProps) {
   return (
     <div className="fm-toolbar" style={{
       display: 'flex', gap: 6, padding: '6px 12px',
@@ -42,6 +44,15 @@ export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRe
 
       <button onClick={onDelete} disabled={!hasSelection}>✕ Delete</button>
       <button onClick={onAddPC} disabled={!hasSelection}>+ Add PC</button>
+      <button
+        onClick={onTogglePCLabels}
+        style={{
+          background: showPCLabels ? '#1a1a1a' : '#fff',
+          color: showPCLabels ? '#fff' : '#333',
+        }}
+      >
+        {showPCLabels ? '👁 Hide PCs' : '👁 Show PCs'}
+      </button>
 
       <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
 

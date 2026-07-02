@@ -26,6 +26,7 @@ import { constraintToString, type FMFeature } from './components/fm/ConstraintBu
 import PropertiesPanel from './components/pn/PropertiesPanel';
 import FeatureModelPanel from './components/fm/FeatureModelPanel';
 import PresenceConditionModal from './components/pn/PresenceConditionModal';
+import PresenceConditionList from './components/pn/PresenceConditionList';
 import { validatePresenceCondition } from './utils/pn/validatePresenceCondition';
 
 const nodeTypes = {
@@ -48,6 +49,8 @@ function App() {
   const [editingPcId, setEditingPcId] = useState<string | null>(null);
   const [presenceConditions, setPresenceConditions] = useState<PresenceCondition[]>([]);
   const [fmFeatures, setFmFeatures] = useState<FMFeature[]>([]);
+  const [highlightedPcId, setHighlightedPcId] = useState<string | null>(null);
+  const [showPCLabels, setShowPCLabels] = useState(true);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
@@ -247,6 +250,7 @@ function App() {
 
   const handleConfirmPC = useCallback((expression: Constraint) => {
     const newElementIds = pcElements.map(e => e.id);
+    const elementLabels = Object.fromEntries(pcElements.map(e => [e.id, e.label || e.id]));
     const errors = validatePresenceCondition({
       elementIds: newElementIds,
       expression,
@@ -255,6 +259,7 @@ function App() {
       editingId: editingPcId ?? undefined,
       pnNodes: nodesRef.current,
       pnEdges: edgesRef.current,
+      elementLabels,
     });
     if (errors.length > 0) {
       alert(errors.map(e => e.message).join('\n'));
@@ -293,10 +298,9 @@ function App() {
       if (selectedTool !== 'place' && selectedTool !== 'transition') return;
       if (!reactFlowWrapper.current || !reactFlowInstance.current) return;
 
-      const bounds = reactFlowWrapper.current.getBoundingClientRect();
       const position = reactFlowInstance.current.screenToFlowPosition({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top,
+        x: event.clientX,
+        y: event.clientY,
       });
 
       if (selectedTool === 'place') {
@@ -373,30 +377,42 @@ function App() {
   }, []);
 
   const displayNodes = useMemo(() => {
-    const pcMap = new Map<string, string>(
-      presenceConditions.flatMap(pc =>
-        pc.elementIds.map(id => [id, constraintToString(pc.expression, fmFeatures)])
-      )
-    );
-    return nodes.map(n => {
-      const pcLabel = pcMap.get(n.id);
-      return pcLabel ? { ...n, data: { ...n.data, pcLabel } } : n;
+    const pcMap = new Map<string, string>();
+    presenceConditions.forEach(pc => {
+      const label = constraintToString(pc.expression, fmFeatures);
+      pc.elementIds.forEach(id => pcMap.set(id, label));
     });
-  }, [nodes, presenceConditions, fmFeatures]);
+    const highlightIds = highlightedPcId
+      ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
+      : new Set<string>();
+    return nodes.map(n => {
+      const pcLabel = showPCLabels ? pcMap.get(n.id) : undefined;
+      const pcHighlight = highlightIds.has(n.id);
+      if (!pcLabel && !pcHighlight) return n;
+      return { ...n, data: { ...n.data, ...(pcLabel ? { pcLabel } : {}), ...(pcHighlight ? { pcHighlight: true } : {}) } };
+    });
+  }, [nodes, presenceConditions, fmFeatures, highlightedPcId, showPCLabels]);
 
   const displayEdges = useMemo(() => {
-    const pcMap = new Map<string, string>(
-      presenceConditions.flatMap(pc =>
-        pc.elementIds.map(id => [id, constraintToString(pc.expression, fmFeatures)])
-      )
-    );
-    return edges.map(e => {
-      const pcLabel = pcMap.get(e.id);
-      if (!pcLabel) return e;
-      const arcName = (e.data?.label as string) ?? '';
-      return { ...e, label: `${arcName} [${pcLabel}]` };
+    const pcMap = new Map<string, string>();
+    presenceConditions.forEach(pc => {
+      const label = constraintToString(pc.expression, fmFeatures);
+      pc.elementIds.forEach(id => pcMap.set(id, label));
     });
-  }, [edges, presenceConditions, fmFeatures]);
+    const highlightIds = highlightedPcId
+      ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
+      : new Set<string>();
+    return edges.map(e => {
+      const pcLabel = showPCLabels ? pcMap.get(e.id) : undefined;
+      const isHighlighted = highlightIds.has(e.id);
+      const arcName = (e.data?.label as string) ?? '';
+      return {
+        ...e,
+        ...(pcLabel ? { label: `${arcName} [${pcLabel}]` } : {}),
+        ...(isHighlighted ? { style: { stroke: '#f5a623', strokeWidth: 2 } } : {}),
+      };
+    });
+  }, [edges, presenceConditions, fmFeatures, highlightedPcId, showPCLabels]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -417,10 +433,22 @@ function App() {
             onRedo={redo}
             onDelete={deleteSelected}
             onAddPC={() => { setPcElements([...pnSelection]); setPcModalOpen(true); }}
+            showPCLabels={showPCLabels}
+            onTogglePCLabels={() => setShowPCLabels(v => !v)}
             noNodes={nodes.length === 0}
             hasSelection={pnSelection.length > 0}
           />
           <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
+            <PresenceConditionList
+              presenceConditions={presenceConditions}
+              fmFeatures={fmFeatures}
+              allPnNodes={nodes}
+              allPnEdges={edges}
+              highlightedPcId={highlightedPcId}
+              onHighlight={id => setHighlightedPcId(id)}
+              onEdit={handleEditPC}
+              onRemove={handleRemovePC}
+            />
             <PropertiesPanel
               node={propertiesNode}
               edge={propertiesEdge}
@@ -492,6 +520,7 @@ function App() {
           fmFeatures={fmFeatures}
           presenceConditions={presenceConditions}
           initialConstraint={editingPcId ? presenceConditions.find(p => p.id === editingPcId)?.expression : undefined}
+          editingId={editingPcId ?? undefined}
           onConfirm={handleConfirmPC}
           onCancel={() => { setEditingPcId(null); setPcModalOpen(false); }}
         />

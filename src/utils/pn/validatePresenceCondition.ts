@@ -16,6 +16,7 @@ export function validatePresenceCondition({
   editingId,
   pnNodes,
   pnEdges,
+  elementLabels,
 }: {
   elementIds: string[];
   expression: Constraint;
@@ -24,6 +25,7 @@ export function validatePresenceCondition({
   editingId?: string;
   pnNodes?: Node[];
   pnEdges?: Edge[];
+  elementLabels?: Record<string, string>;
 }): PCValidationError[] {
   const errors: PCValidationError[] = [];
 
@@ -64,7 +66,7 @@ export function validatePresenceCondition({
     }
   }
 
-  // Rule 5 — no element may already have a different PC
+  // Rule 5 — each element may belong to at most one presence condition
   if (elementIds.length > 0) {
     const conflicts = presenceConditions.filter(
       pc => pc.id !== editingId && pc.elementIds.some(id => elementIds.includes(id))
@@ -73,9 +75,10 @@ export function validatePresenceCondition({
       const conflictingIds = [...new Set(
         conflicts.flatMap(pc => pc.elementIds).filter(id => elementIds.includes(id))
       )];
+      const names = conflictingIds.map(id => elementLabels?.[id] ?? id).join(', ');
       errors.push({
         rule: 'duplicate-pc',
-        message: `${conflictingIds.length} selected element(s) already have a presence condition. Edit the existing condition instead.`,
+        message: `The following element(s) already have a presence condition: ${names}. Use Edit to modify it.`,
       });
     }
   }

@@ -303,9 +303,12 @@ export default function FeatureModelPanel({ onFeaturesChange }: Props) {
                 <button onClick={redoFm}>Redo</button>
             </div>
 
-            {/* Constraint builder */}
+            {/* Feature Model Constraints builder */}
             {nodes.length > 0 && (
                 <div style={{ padding: '6px 12px', borderBottom: '1px solid #e0e0e0', background: '#fff', flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                        Feature Model Constraints
+                    </div>
                     <ConstraintBuilder features={featuresList} value={constraint} onChange={setConstraint} />
                     {constraint.terms.length > 0 && (
                         <button onClick={saveConstraint} style={{ marginTop: 6, fontSize: 12 }}>
@@ -316,7 +319,46 @@ export default function FeatureModelPanel({ onFeaturesChange }: Props) {
             )}
 
             {/* Canvas */}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+                {/* Legend */}
+                {nodes.length > 0 && (
+                    <div style={{
+                        position: 'absolute', bottom: 10, right: 10, zIndex: 10,
+                        background: 'white', border: '1px solid #ddd', borderRadius: 6,
+                        padding: '8px 12px', fontSize: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                        display: 'flex', flexDirection: 'column', gap: 5,
+                    }}>
+                        <div style={{ fontWeight: 600, fontSize: 11, color: '#555', marginBottom: 2 }}>Legend</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #555', background: '#555', flexShrink: 0 }} />
+                            <span style={{ color: '#333' }}>Mandatory</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #555', background: 'white', flexShrink: 0 }} />
+                            <span style={{ color: '#333' }}>Optional</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <svg width="16" height="14" viewBox="0 0 16 14" style={{ flexShrink: 0 }}>
+                                <polygon points="8,1 15,13 1,13" fill="#333" stroke="#333" strokeWidth="1.5" />
+                            </svg>
+                            <span style={{ color: '#333' }}>OR Group</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <svg width="16" height="14" viewBox="0 0 16 14" style={{ flexShrink: 0 }}>
+                                <polygon points="8,1 15,13 1,13" fill="white" stroke="#333" strokeWidth="1.5" />
+                            </svg>
+                            <span style={{ color: '#333' }}>XOR Group</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 16, height: 12, borderRadius: 2, border: '2px solid #9b7fd4', background: '#e8d5f5', flexShrink: 0 }} />
+                            <span style={{ color: '#333' }}>Abstract</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 16, height: 12, borderRadius: 2, border: '2px solid #9b7fd4', background: '#c5cff5', flexShrink: 0 }} />
+                            <span style={{ color: '#333' }}>Concrete</span>
+                        </div>
+                    </div>
+                )}
                 <ReactFlow
                     colorMode="light"
                     style={{ background: '#fafafa' }}
@@ -348,9 +390,12 @@ export default function FeatureModelPanel({ onFeaturesChange }: Props) {
                 </div>
             )}
 
-            {/* Saved constraints */}
+            {/* Saved Feature Model Constraints */}
             {savedConstraints.length > 0 && (
                 <div style={{ padding: '8px 16px', borderTop: '1px solid #ddd', background: '#fff', flexShrink: 0, fontSize: 13 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                        Saved Constraints
+                    </div>
                     {savedConstraints.map((c, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                             <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{constraintToString(c, featuresList)}</span>

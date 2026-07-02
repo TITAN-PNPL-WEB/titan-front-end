@@ -12,13 +12,13 @@ const HANDLES = [
   { id: 'nw', x: 0,  y: 0,  position: Position.Top    },
 ];
 
-function TransitionNode({ data, selected }: { data: TransitionData & { pcLabel?: string }; selected: boolean }) {
+function TransitionNode({ data, selected }: { data: TransitionData & { pcLabel?: string; pcHighlight?: boolean }; selected: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{
         width: 16,
         height: 60,
-        border: selected ? '2.5px solid #1a73e8' : '2px solid black',
+        border: selected ? '2.5px solid #1a73e8' : data.pcHighlight ? '2.5px solid #f5a623' : '2px solid black',
         background: 'black',
         position: 'relative',
       }}>
