@@ -29,11 +29,15 @@ export interface PNSelectedElement {
   label: string;
 }
 
-// --- Presence Condition ---
-import type { Constraint } from './featuremodel';
+// --- Presence Condition Expression (recursive AST matching the .ecore metamodel) ---
+export type PcExpression =
+  | { type: 'feature';  featureId: string }
+  | { type: 'not';      right: PcExpression }
+  | { type: 'binary';   op: 'AND' | 'OR' | 'IMPLIES'; left: PcExpression; right: PcExpression }
 
+// --- Presence Condition ---
 export interface PresenceCondition {
   id: string;
   elementIds: string[];
-  expression: Constraint;
+  expression: PcExpression;
 }

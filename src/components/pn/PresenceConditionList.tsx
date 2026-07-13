@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { PresenceCondition } from '../../types/petrinet';
-import { constraintToString, type FMFeature } from '../fm/ConstraintBuilder';
+import type { FMFeature } from '../fm/ConstraintBuilder';
+import { pcExpressionToString } from '../../utils/pn/pcExpression';
 
 interface Props {
   presenceConditions: PresenceCondition[];
@@ -17,6 +19,8 @@ export default function PresenceConditionList({
   presenceConditions, fmFeatures, allPnNodes, allPnEdges,
   highlightedPcId, onHighlight, onEdit, onRemove,
 }: Props) {
+  const [collapsed, setCollapsed] = useState(false);
+
   if (presenceConditions.length === 0) return null;
 
   function getLabel(id: string): string {
@@ -30,24 +34,36 @@ export default function PresenceConditionList({
     <div style={{
       position: 'absolute',
       bottom: 10,
-      left: 10,
+      right: 10,
       zIndex: 10,
       background: 'white',
-      padding: 12,
       borderRadius: 8,
       boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
       minWidth: 240,
       maxWidth: 340,
-      maxHeight: 220,
-      overflowY: 'auto',
+      overflow: 'hidden',
     }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#444', marginBottom: 8 }}>
-        Presence Conditions ({presenceConditions.length})
+      <div
+        onClick={() => setCollapsed(v => !v)}
+        style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '8px 12px',
+          fontSize: 12, fontWeight: 600, color: '#444',
+          cursor: 'pointer',
+          userSelect: 'none',
+          borderBottom: collapsed ? 'none' : '1px solid #eee',
+        }}
+      >
+        <span>Presence Conditions ({presenceConditions.length})</span>
+        <span style={{ fontSize: 10, color: '#999', marginLeft: 8 }}>{collapsed ? '▲' : '▼'}</span>
       </div>
+
+      {!collapsed && (
+      <div style={{ padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {presenceConditions.map((pc, i) => {
           const isHighlighted = highlightedPcId === pc.id;
-          const expression = constraintToString(pc.expression, fmFeatures);
+          const expression = pcExpressionToString(pc.expression, fmFeatures);
           const elementLabels = pc.elementIds.map(getLabel).join(', ');
           return (
             <div
@@ -90,6 +106,8 @@ export default function PresenceConditionList({
           );
         })}
       </div>
+      </div>
+      )}
     </div>
   );
 }

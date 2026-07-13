@@ -8,6 +8,7 @@ interface Props {
   features: FMFeature[];
   value: Constraint;
   onChange: (c: Constraint) => void;
+  allowExcludes?: boolean;
 }
 
 function termLabel(term: ConstraintTerm, features: FMFeature[]): string {
@@ -27,7 +28,7 @@ export function constraintToString(c: Constraint, features: FMFeature[]): string
   }).join('');
 }
 
-export default function ConstraintBuilder({ features, value, onChange }: Props) {
+export default function ConstraintBuilder({ features, value, onChange, allowExcludes = true }: Props) {
   const [addingTerm, setAddingTerm] = useState(false);
   const [termType, setTermType] = useState<'feature' | 'requires' | 'excludes'>('feature');
   const [termSource, setTermSource] = useState('');
@@ -83,7 +84,7 @@ export default function ConstraintBuilder({ features, value, onChange }: Props) 
           <select value={termType} onChange={e => setTermType(e.target.value as 'feature' | 'requires' | 'excludes')} style={{ fontSize: 12 }}>
             <option value="feature">Feature</option>
             <option value="requires">Requires (⇒)</option>
-            <option value="excludes">Excludes</option>
+            {allowExcludes && <option value="excludes">Excludes</option>}
           </select>
           <select value={termSource} onChange={e => setTermSource(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Select feature</option>

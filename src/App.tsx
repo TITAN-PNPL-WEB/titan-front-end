@@ -20,9 +20,9 @@ import PlaceNode from './components/pn/PlaceNode';
 import TransitionNode from './components/pn/TransitionNode';
 import Toolbar from './components/Toolbar';
 import PetriNetToolbar from './components/pn/PetriNetToolbar';
-import type { ToolType, PNSelectedElement, PresenceCondition } from './types/petrinet';
-import type { Constraint } from './types/featuremodel';
-import { constraintToString, type FMFeature } from './components/fm/ConstraintBuilder';
+import type { ToolType, PNSelectedElement, PresenceCondition, PcExpression } from './types/petrinet';
+import type { FMFeature } from './components/fm/ConstraintBuilder';
+import { pcExpressionToString } from './utils/pn/pcExpression';
 import PropertiesPanel from './components/pn/PropertiesPanel';
 import FeatureModelPanel from './components/fm/FeatureModelPanel';
 import PresenceConditionModal from './components/pn/PresenceConditionModal';
@@ -248,9 +248,9 @@ function App() {
     removePresenceCondition(pcId);
   }, [presenceConditions, removePresenceCondition]);
 
-  const handleConfirmPC = useCallback((expression: Constraint) => {
-    const newElementIds = pcElements.map(e => e.id);
-    const elementLabels = Object.fromEntries(pcElements.map(e => [e.id, e.label || e.id]));
+  const handleConfirmPC = useCallback((expression: PcExpression | null, confirmedElements: PNSelectedElement[]) => {
+    const newElementIds = confirmedElements.map(e => e.id);
+    const elementLabels = Object.fromEntries(confirmedElements.map(e => [e.id, e.label || e.id]));
     const errors = validatePresenceCondition({
       elementIds: newElementIds,
       expression,
@@ -265,8 +265,9 @@ function App() {
       alert(errors.map(e => e.message).join('\n'));
       return;
     }
+    if (!expression) return; // narrowed: validation already caught this above
     if (editingPcId) {
-      updatePresenceCondition(editingPcId, { expression });
+      updatePresenceCondition(editingPcId, { expression, elementIds: newElementIds });
     } else {
       setPresenceConditions(prev => [
         ...prev,
@@ -275,7 +276,7 @@ function App() {
     }
     setEditingPcId(null);
     setPcModalOpen(false);
-  }, [pcElements, fmFeatures, presenceConditions, editingPcId, updatePresenceCondition]);
+  }, [fmFeatures, presenceConditions, editingPcId, updatePresenceCondition]);
 
   const handleEditPC = useCallback((pcId: string) => {
     const pc = presenceConditions.find(p => p.id === pcId);
@@ -379,7 +380,7 @@ function App() {
   const displayNodes = useMemo(() => {
     const pcMap = new Map<string, string>();
     presenceConditions.forEach(pc => {
-      const label = constraintToString(pc.expression, fmFeatures);
+      const label = pcExpressionToString(pc.expression, fmFeatures);
       pc.elementIds.forEach(id => pcMap.set(id, label));
     });
     const highlightIds = highlightedPcId
@@ -396,7 +397,7 @@ function App() {
   const displayEdges = useMemo(() => {
     const pcMap = new Map<string, string>();
     presenceConditions.forEach(pc => {
-      const label = constraintToString(pc.expression, fmFeatures);
+      const label = pcExpressionToString(pc.expression, fmFeatures);
       pc.elementIds.forEach(id => pcMap.set(id, label));
     });
     const highlightIds = highlightedPcId
@@ -517,9 +518,11 @@ function App() {
       {pcModalOpen && (
         <PresenceConditionModal
           elements={pcElements}
+          allPnNodes={nodes}
+          allPnEdges={edges}
           fmFeatures={fmFeatures}
           presenceConditions={presenceConditions}
-          initialConstraint={editingPcId ? presenceConditions.find(p => p.id === editingPcId)?.expression : undefined}
+          initialExpression={editingPcId ? presenceConditions.find(p => p.id === editingPcId)?.expression : undefined}
           editingId={editingPcId ?? undefined}
           onConfirm={handleConfirmPC}
           onCancel={() => { setEditingPcId(null); setPcModalOpen(false); }}

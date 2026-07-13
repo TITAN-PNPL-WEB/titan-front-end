@@ -1,6 +1,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { PlaceData, TransitionData, PresenceCondition } from '../../types/petrinet';
-import { constraintToString, type FMFeature } from '../fm/ConstraintBuilder';
+import type { FMFeature } from '../fm/ConstraintBuilder';
+import { pcExpressionToString } from '../../utils/pn/pcExpression';
 
 interface PropertiesPanelProps {
   node: Node | null;
@@ -59,7 +60,7 @@ function PropertiesPanel({
       {pc ? (
         <>
           <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#1a1a1a', marginBottom: 4, wordBreak: 'break-word' }}>
-            {constraintToString(pc.expression, fmFeatures)}
+            {pcExpressionToString(pc.expression, fmFeatures)}
           </div>
           {otherElementLabels.length > 0 && (
             <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>
