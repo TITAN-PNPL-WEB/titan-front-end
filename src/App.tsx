@@ -31,6 +31,9 @@ import { validatePresenceCondition } from './utils/pn/validatePresenceCondition'
 import { exportPetriNet } from './utils/export/exportPetriNet';
 import { exportFeatureModel } from './utils/export/exportFeatureModel';
 import { exportVariability } from './utils/export/exportVariability';
+import { importPetriNet } from './utils/import/importPetriNet';
+import { importFeatureModel } from './utils/import/importFeatureModel';
+import { importVariability } from './utils/import/importVariability';
 
 const nodeTypes = {
   place: PlaceNode,
@@ -90,6 +93,53 @@ function App() {
       URL.revokeObjectURL(url);
     }
   }, [nodes, edges, presenceConditions, fmFeatures]);
+
+  const handleImport = useCallback(async (files: File[]) => {
+    const pnFile  = files.find(f => f.name.endsWith('.petrinets'));
+    const fmFile  = files.find(f => f.name.endsWith('.xml'));
+    const vrbFile = files.find(f => f.name.endsWith('.vrb'));
+
+    if (!pnFile && !fmFile && !vrbFile) return;
+
+    const [pnText, fmText, vrbText] = await Promise.all([
+      pnFile?.text()  ?? Promise.resolve(null),
+      fmFile?.text()  ?? Promise.resolve(null),
+      vrbFile?.text() ?? Promise.resolve(null),
+    ]);
+
+    // Only update PN if a .petrinets file was provided
+    let effectivePnNodes = nodesRef.current;
+    let effectivePnEdges = edgesRef.current;
+    if (pnText !== null) {
+      const pnResult = importPetriNet(pnText);
+      setNodes(pnResult.nodes);
+      setEdges(pnResult.edges);
+      arcCounter.current = pnResult.maxArcIndex;
+      history.current = [{ nodes: pnResult.nodes, edges: pnResult.edges }];
+      historyIndex.current = 0;
+      setPnSelection([]);
+      setPropertiesNode(null);
+      setPropertiesEdge(null);
+      effectivePnNodes = pnResult.nodes;
+      effectivePnEdges = pnResult.edges;
+    }
+
+    // Only update FM if a .xml file was provided
+    let effectiveFmFeatures = fmFeatures;
+    if (fmText !== null) {
+      const fmResult = importFeatureModel(fmText);
+      fmPanelRef.current?.loadFmData(fmResult.nodes, fmResult.edges, fmResult.constraints);
+      effectiveFmFeatures = fmResult.nodes
+        .filter(n => !n.data.root)
+        .map(n => ({ id: n.id, label: n.data.label }));
+    }
+
+    // Only update PCs if a .vrb file was provided
+    if (vrbText !== null) {
+      const pcs = importVariability(vrbText, effectivePnNodes, effectivePnEdges, effectiveFmFeatures);
+      setPresenceConditions(pcs);
+    }
+  }, [setNodes, setEdges, fmFeatures]);
 
   const saveSnapshot = useCallback(() => {
     history.current = history.current.slice(0, historyIndex.current + 1);
@@ -443,7 +493,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      <Toolbar onExport={handleExport} />
+      <Toolbar onExport={handleExport} exportDisabled={nodes.length === 0 && fmFeatures.length === 0} onImport={handleImport} />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 

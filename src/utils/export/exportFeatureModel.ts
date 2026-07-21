@@ -38,7 +38,7 @@ function serializeNode(
   const node = nodes.find(n => n.id === nodeId);
   if (!node) return [];
 
-  const data = node.data as FMNodeData;
+  const data = node.data as unknown as FMNodeData;
   const isRoot    = data.root === true;
   const mandatory = data.mandatory === true || isRoot;
   const indent    = '\t'.repeat(level);
@@ -78,7 +78,7 @@ export function exportFeatureModel(
   const getLabel = (id: string) =>
     ((nodes.find(n => n.id === id)?.data) as FMNodeData | undefined)?.label ?? id;
 
-  const root = nodes.find(n => (n.data as FMNodeData).root === true);
+  const root = nodes.find(n => (n.data as unknown as FMNodeData).root === true);
 
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',

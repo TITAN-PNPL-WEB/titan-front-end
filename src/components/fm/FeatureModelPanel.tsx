@@ -15,7 +15,7 @@ import FeatureNode from './FeatureNode';
 import GroupEdge from './GroupEdge';
 import { validateFeatureModel } from '../../utils/fm/validateFeatureModel';
 import ConstraintBuilder, { constraintToString, type FMFeature } from './ConstraintBuilder';
-import type { Constraint } from '../../types/featuremodel';
+import type { Constraint, FeatureData } from '../../types/featuremodel';
 import { EMPTY_CONSTRAINT } from '../../types/featuremodel';
 
 const nodeTypes = { feature: FeatureNode };
@@ -24,19 +24,13 @@ const edgeTypes = { group: GroupEdge };
 const NODE_WIDTH = 120;
 const NODE_HEIGHT = 40;
 
-interface FeatureData extends Record<string, unknown> {
-    label: string;
-    abstract: boolean;
-    root: boolean;
-    mandatory?: boolean;
-}
-
 export interface FeatureModelPanelRef {
     getFmExportData: () => {
         nodes: Node<FeatureData>[];
         edges: Edge[];
         constraints: Constraint[];
     };
+    loadFmData: (nodes: Node<FeatureData>[], edges: Edge[], constraints: Constraint[]) => void;
 }
 
 interface Props {
@@ -281,7 +275,21 @@ const FeatureModelPanel = forwardRef<FeatureModelPanelRef, Props>(function Featu
 
     useImperativeHandle(ref, () => ({
         getFmExportData: () => ({ nodes, edges, constraints: savedConstraints }),
-    }), [nodes, edges, savedConstraints]);
+        loadFmData: (newNodes: Node<FeatureData>[], newEdges: Edge[], newConstraints: Constraint[]) => {
+            if (newNodes.length > 0) {
+                setNodes(applyDagreLayout(newNodes, newEdges));
+            } else {
+                setNodes([]);
+            }
+            setEdges(newEdges);
+            setSavedConstraints(newConstraints);
+            setConstraint(EMPTY_CONSTRAINT);
+            setSelectedNode(null);
+            featureCounter.current = 0;
+            fmHistory.current = [{ nodes: newNodes, edges: newEdges }];
+            fmHistoryIndex.current = 0;
+        },
+    }), [nodes, edges, savedConstraints, setNodes, setEdges]);
 
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>

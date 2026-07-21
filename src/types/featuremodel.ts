@@ -1,3 +1,10 @@
+export interface FeatureData extends Record<string, unknown> {
+  label: string;
+  abstract: boolean;
+  root: boolean;
+  mandatory?: boolean;
+}
+
 export type ConstraintOperator = '∧' | '∨';
 
 export interface ConstraintTerm {

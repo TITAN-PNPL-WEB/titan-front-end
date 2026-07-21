@@ -1,8 +1,25 @@
+import { useRef } from 'react';
+
 interface Props {
   onExport?: () => void;
+  exportDisabled?: boolean;
+  onImport?: (files: File[]) => void;
 }
 
-function Toolbar({ onExport }: Props) {
+const btnStyle: React.CSSProperties = {
+  fontSize: 12,
+  padding: '4px 12px',
+  borderRadius: 4,
+  border: '1px solid rgba(255,255,255,0.3)',
+  background: 'rgba(255,255,255,0.1)',
+  color: '#fff',
+  cursor: 'pointer',
+  fontWeight: 500,
+};
+
+function Toolbar({ onExport, exportDisabled, onImport }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div style={{
       zIndex: 20,
@@ -24,24 +41,37 @@ function Toolbar({ onExport }: Props) {
       }}>
         TITAN
       </span>
-      {onExport && (
-        <button
-          onClick={onExport}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 12,
-            padding: '4px 12px',
-            borderRadius: 4,
-            border: '1px solid rgba(255,255,255,0.3)',
-            background: 'rgba(255,255,255,0.1)',
-            color: '#fff',
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          Export Files
-        </button>
-      )}
+
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        {onImport && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".petrinets,.xml,.vrb"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) onImport(files);
+                e.target.value = '';
+              }}
+            />
+            <button onClick={() => fileInputRef.current?.click()} style={btnStyle}>
+              Import Files
+            </button>
+          </>
+        )}
+        {onExport && (
+          <button
+            onClick={onExport}
+            disabled={exportDisabled}
+            style={{ ...btnStyle, opacity: exportDisabled ? 0.4 : 1, cursor: exportDisabled ? 'not-allowed' : 'pointer' }}
+          >
+            Export Files
+          </button>
+        )}
+      </div>
     </div>
   );
 }
