@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
     ReactFlow,
     Background,
@@ -31,6 +31,14 @@ interface FeatureData extends Record<string, unknown> {
     mandatory?: boolean;
 }
 
+export interface FeatureModelPanelRef {
+    getFmExportData: () => {
+        nodes: Node<FeatureData>[];
+        edges: Edge[];
+        constraints: Constraint[];
+    };
+}
+
 interface Props {
     onFeaturesChange?: (features: FMFeature[]) => void;
 }
@@ -48,7 +56,7 @@ function applyDagreLayout(nodes: Node<FeatureData>[], edges: Edge[]): Node<Featu
     });
 }
 
-export default function FeatureModelPanel({ onFeaturesChange }: Props) {
+const FeatureModelPanel = forwardRef<FeatureModelPanelRef, Props>(function FeatureModelPanel({ onFeaturesChange }, ref) {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<FeatureData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [selectedNode, setSelectedNode] = useState<Node<FeatureData> | null>(null);
@@ -271,6 +279,10 @@ export default function FeatureModelPanel({ onFeaturesChange }: Props) {
         [nodes, edges]
     );
 
+    useImperativeHandle(ref, () => ({
+        getFmExportData: () => ({ nodes, edges, constraints: savedConstraints }),
+    }), [nodes, edges, savedConstraints]);
+
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -411,4 +423,6 @@ export default function FeatureModelPanel({ onFeaturesChange }: Props) {
             )}
         </div>
     );
-}
+});
+
+export default FeatureModelPanel;

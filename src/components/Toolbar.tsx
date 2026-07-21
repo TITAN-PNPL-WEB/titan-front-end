@@ -1,4 +1,8 @@
-function Toolbar() {
+interface Props {
+  onExport?: () => void;
+}
+
+function Toolbar({ onExport }: Props) {
   return (
     <div style={{
       zIndex: 20,
@@ -8,6 +12,7 @@ function Toolbar() {
       alignItems: 'center',
       padding: '0 16px',
       flexShrink: 0,
+      gap: 12,
     }}>
       <span style={{
         color: '#ffffff',
@@ -19,6 +24,24 @@ function Toolbar() {
       }}>
         TITAN
       </span>
+      {onExport && (
+        <button
+          onClick={onExport}
+          style={{
+            marginLeft: 'auto',
+            fontSize: 12,
+            padding: '4px 12px',
+            borderRadius: 4,
+            border: '1px solid rgba(255,255,255,0.3)',
+            background: 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+        >
+          Export Files
+        </button>
+      )}
     </div>
   );
 }

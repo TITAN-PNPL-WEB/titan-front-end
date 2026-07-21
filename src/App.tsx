@@ -24,10 +24,13 @@ import type { ToolType, PNSelectedElement, PresenceCondition, PcExpression } fro
 import type { FMFeature } from './components/fm/ConstraintBuilder';
 import { pcExpressionToString } from './utils/pn/pcExpression';
 import PropertiesPanel from './components/pn/PropertiesPanel';
-import FeatureModelPanel from './components/fm/FeatureModelPanel';
+import FeatureModelPanel, { type FeatureModelPanelRef } from './components/fm/FeatureModelPanel';
 import PresenceConditionModal from './components/pn/PresenceConditionModal';
 import PresenceConditionList from './components/pn/PresenceConditionList';
 import { validatePresenceCondition } from './utils/pn/validatePresenceCondition';
+import { exportPetriNet } from './utils/export/exportPetriNet';
+import { exportFeatureModel } from './utils/export/exportFeatureModel';
+import { exportVariability } from './utils/export/exportVariability';
 
 const nodeTypes = {
   place: PlaceNode,
@@ -52,6 +55,8 @@ function App() {
   const [highlightedPcId, setHighlightedPcId] = useState<string | null>(null);
   const [showPCLabels, setShowPCLabels] = useState(true);
 
+  const fmPanelRef = useRef<FeatureModelPanelRef>(null);
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
   const isConnecting = useRef(false);
@@ -66,6 +71,25 @@ function App() {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
+
+  const handleExport = useCallback(() => {
+    const fmData = fmPanelRef.current?.getFmExportData();
+    if (!fmData) return;
+    const pnFilename  = '150mm.petrinets';
+    const fmFilename  = 'model.xml';
+    const vrbFilename = '150mm.vrb';
+    const files = [
+      { name: pnFilename,  content: exportPetriNet(nodes, edges) },
+      { name: fmFilename,  content: exportFeatureModel(fmData.nodes, fmData.edges, fmData.constraints) },
+      { name: vrbFilename, content: exportVariability(presenceConditions, nodes, edges, fmFeatures, pnFilename, fmFilename) },
+    ];
+    for (const { name, content } of files) {
+      const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+    }
+  }, [nodes, edges, presenceConditions, fmFeatures]);
 
   const saveSnapshot = useCallback(() => {
     history.current = history.current.slice(0, historyIndex.current + 1);
@@ -112,6 +136,7 @@ function App() {
         return;
       }
 
+      const arcType: 'PT' | 'TP' = sourceNode?.type === 'place' ? 'PT' : 'TP';
       let arcLabel: string;
       do {
         arcLabel = `arc${++arcCounter.current}`;
@@ -124,7 +149,7 @@ function App() {
           labelBgStyle: { fill: '#fff', fillOpacity: 0.85 },
           labelBgPadding: [4, 4] as [number, number],
           labelBgBorderRadius: 3,
-          data: { label: arcLabel },
+          data: { label: arcLabel, arcType },
           markerEnd: { type: MarkerType.ArrowClosed },
         },
         currentEdges
@@ -418,7 +443,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      <Toolbar />
+      <Toolbar onExport={handleExport} />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
@@ -510,7 +535,7 @@ function App() {
           <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 13, fontWeight: 'bold', borderBottom: '1px solid #ddd', background: '#fff' }}>
             Feature Model
           </div>
-          <FeatureModelPanel onFeaturesChange={setFmFeatures} />
+          <FeatureModelPanel ref={fmPanelRef} onFeaturesChange={setFmFeatures} />
         </div>
 
       </div>
