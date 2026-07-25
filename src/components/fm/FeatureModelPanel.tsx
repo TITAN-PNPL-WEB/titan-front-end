@@ -305,12 +305,14 @@ const FeatureModelPanel = forwardRef<FeatureModelPanelRef, Props>(function Featu
                 <button onClick={() => addGroup('or')} disabled={!selectedNode}>Add OR Group</button>
                 <button onClick={() => addGroup('xor')} disabled={!selectedNode}>Add XOR Group</button>
 
-                {selectedNode && !selectedNode.data.root && (
+                {selectedNode && (
                     <>
                         <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />
-                        <button onClick={toggleMandatory}>
-                            {selectedNode.data.mandatory ? 'Mandatory' : 'Optional'}
-                        </button>
+                        {!selectedNode.data.root && (
+                            <button onClick={toggleMandatory}>
+                                {selectedNode.data.mandatory ? 'Mandatory' : 'Optional'}
+                            </button>
+                        )}
                         <button onClick={toggleAbstract}>
                             {selectedNode.data.abstract ? 'Abstract' : 'Concrete'}
                         </button>

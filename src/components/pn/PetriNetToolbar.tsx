@@ -51,7 +51,7 @@ export default function PetriNetToolbar({ activeTool, onToolChange, onUndo, onRe
           color: showPCLabels ? '#fff' : '#333',
         }}
       >
-        {showPCLabels ? '👁 Hide PCs' : '👁 Show PCs'}
+        {showPCLabels ? 'Hide PCs' : 'Show PCs'}
       </button>
 
       <div style={{ width: 1, background: '#ddd', height: 20, margin: '0 4px' }} />

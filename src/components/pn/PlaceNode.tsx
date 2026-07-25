@@ -30,7 +30,11 @@ function PlaceNode({ data, selected }: { data: PlaceData & { pcLabel?: string; p
         background: 'white',
         position: 'relative',
       }}>
-        {data.tokens > 0 && <span style={{ fontSize: 14 }}>{'•'.repeat(data.tokens)}</span>}
+        {data.tokens > 0 && (
+          <span style={{ fontSize: data.tokens >= 4 ? 13 : 14, fontWeight: data.tokens >= 4 ? 600 : undefined }}>
+            {data.tokens >= 4 ? data.tokens : '•'.repeat(data.tokens)}
+          </span>
+        )}
 
         {HANDLE_ANGLES.map(({ id, deg, position }) => {
           const rad = (deg * Math.PI) / 180;

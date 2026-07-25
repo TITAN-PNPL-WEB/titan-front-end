@@ -14,10 +14,12 @@ import {
   type Connection,
   type ReactFlowInstance,
   type OnSelectionChangeParams,
+  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import PlaceNode from './components/pn/PlaceNode';
 import TransitionNode from './components/pn/TransitionNode';
+import PcAnnotationNode from './components/pn/PcAnnotationNode';
 import Toolbar from './components/Toolbar';
 import PetriNetToolbar from './components/pn/PetriNetToolbar';
 import type { ToolType, PNSelectedElement, PresenceCondition, PcExpression } from './types/petrinet';
@@ -38,6 +40,7 @@ import { importVariability } from './utils/import/importVariability';
 const nodeTypes = {
   place: PlaceNode,
   transition: TransitionNode,
+  pcAnnotation: PcAnnotationNode,
 };
 
 const initialNodes: Node[] = [];
@@ -57,6 +60,7 @@ function App() {
   const [fmFeatures, setFmFeatures] = useState<FMFeature[]>([]);
   const [highlightedPcId, setHighlightedPcId] = useState<string | null>(null);
   const [showPCLabels, setShowPCLabels] = useState(true);
+  const [pcAnnotationPositions, setPcAnnotationPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   const fmPanelRef = useRef<FeatureModelPanelRef>(null);
 
@@ -101,6 +105,24 @@ function App() {
 
     if (!pnFile && !fmFile && !vrbFile) return;
 
+    // Enforce import order: FM → PN → VRB
+    if (pnFile && !fmFile && fmFeatures.length === 0) {
+      alert('Import the Feature Model (.xml) first, then the Petri Net (.petrinets).');
+      return;
+    }
+    if (vrbFile) {
+      const fmAvailable = !!fmFile || fmFeatures.length > 0;
+      const pnAvailable = !!pnFile || nodesRef.current.length > 0;
+      if (!fmAvailable) {
+        alert('Import the Feature Model (.xml) before importing variability (.vrb).');
+        return;
+      }
+      if (!pnAvailable) {
+        alert('Import the Petri Net (.petrinets) before importing variability (.vrb).');
+        return;
+      }
+    }
+
     const [pnText, fmText, vrbText] = await Promise.all([
       pnFile?.text()  ?? Promise.resolve(null),
       fmFile?.text()  ?? Promise.resolve(null),
@@ -138,6 +160,7 @@ function App() {
     if (vrbText !== null) {
       const pcs = importVariability(vrbText, effectivePnNodes, effectivePnEdges, effectiveFmFeatures);
       setPresenceConditions(pcs);
+      setPcAnnotationPositions({});
     }
   }, [setNodes, setEdges, fmFeatures]);
 
@@ -210,6 +233,7 @@ function App() {
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.id.startsWith('pc-annot-')) return;
     if (selectedToolRef.current !== 'select') return;
     setPropertiesNode(node);
     setPropertiesEdge(null);
@@ -303,7 +327,27 @@ function App() {
 
   const removePresenceCondition = useCallback((id: string) => {
     setPresenceConditions(prev => prev.filter(pc => pc.id !== id));
+    setPcAnnotationPositions(prev => { const n = { ...prev }; delete n[id]; return n; });
   }, []);
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    const pcUpdates: Record<string, { x: number; y: number }> = {};
+    const pnChanges: NodeChange[] = [];
+    for (const change of changes) {
+      const id = 'id' in change ? (change as { id: string }).id : '';
+      if (id.startsWith('pc-annot-')) {
+        if (change.type === 'position' && change.position) {
+          pcUpdates[id.slice('pc-annot-'.length)] = change.position;
+        }
+      } else {
+        pnChanges.push(change);
+      }
+    }
+    if (Object.keys(pcUpdates).length > 0) {
+      setPcAnnotationPositions(prev => ({ ...prev, ...pcUpdates }));
+    }
+    if (pnChanges.length > 0) onNodesChange(pnChanges);
+  }, [onNodesChange]);
 
   const handleRemovePC = useCallback((pcId: string) => {
     const pc = presenceConditions.find(p => p.id === pcId);
@@ -453,42 +497,75 @@ function App() {
   }, []);
 
   const displayNodes = useMemo(() => {
-    const pcMap = new Map<string, string>();
-    presenceConditions.forEach(pc => {
-      const label = pcExpressionToString(pc.expression, fmFeatures);
-      pc.elementIds.forEach(id => pcMap.set(id, label));
-    });
     const highlightIds = highlightedPcId
       ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
       : new Set<string>();
-    return nodes.map(n => {
-      const pcLabel = showPCLabels ? pcMap.get(n.id) : undefined;
-      const pcHighlight = highlightIds.has(n.id);
-      if (!pcLabel && !pcHighlight) return n;
-      return { ...n, data: { ...n.data, ...(pcLabel ? { pcLabel } : {}), ...(pcHighlight ? { pcHighlight: true } : {}) } };
-    });
-  }, [nodes, presenceConditions, fmFeatures, highlightedPcId, showPCLabels]);
 
-  const displayEdges = useMemo(() => {
-    const pcMap = new Map<string, string>();
-    presenceConditions.forEach(pc => {
-      const label = pcExpressionToString(pc.expression, fmFeatures);
-      pc.elementIds.forEach(id => pcMap.set(id, label));
+    const pnNodes = nodes.map(n => {
+      const pcHighlight = highlightIds.has(n.id);
+      if (!pcHighlight) return n;
+      return { ...n, data: { ...n.data, pcHighlight: true } };
     });
-    const highlightIds = highlightedPcId
-      ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
-      : new Set<string>();
-    return edges.map(e => {
-      const pcLabel = showPCLabels ? pcMap.get(e.id) : undefined;
-      const isHighlighted = highlightIds.has(e.id);
-      const arcName = (e.data?.label as string) ?? '';
+
+    if (!showPCLabels) return pnNodes;
+
+    const pcAnnotNodes = presenceConditions.map(pc => {
+      const positions = pc.elementIds
+        .map(id => nodes.find(n => n.id === id)?.position)
+        .filter(Boolean) as { x: number; y: number }[];
+      const defaultPos = positions.length > 0
+        ? {
+            x: positions.reduce((s, p) => s + p.x, 0) / positions.length + 80,
+            y: positions.reduce((s, p) => s + p.y, 0) / positions.length - 60,
+          }
+        : { x: 100, y: 50 };
       return {
-        ...e,
-        ...(pcLabel ? { label: `${arcName} [${pcLabel}]` } : {}),
-        ...(isHighlighted ? { style: { stroke: '#f5a623', strokeWidth: 2 } } : {}),
+        id: `pc-annot-${pc.id}`,
+        type: 'pcAnnotation' as const,
+        position: pcAnnotationPositions[pc.id] ?? defaultPos,
+        data: {
+          label: pcExpressionToString(pc.expression, fmFeatures),
+          highlighted: pc.id === highlightedPcId,
+        },
+        draggable: true,
+        selectable: false,
+        deletable: false,
       };
     });
-  }, [edges, presenceConditions, fmFeatures, highlightedPcId, showPCLabels]);
+
+    return [...pnNodes, ...pcAnnotNodes];
+  }, [nodes, presenceConditions, fmFeatures, highlightedPcId, showPCLabels, pcAnnotationPositions]);
+
+  const displayEdges = useMemo(() => {
+    const highlightIds = highlightedPcId
+      ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
+      : new Set<string>();
+    const nodeIds = new Set(nodes.map(n => n.id));
+
+    const pnEdges = edges.map(e => ({
+      ...e,
+      ...(highlightIds.has(e.id) ? { style: { stroke: '#f5a623', strokeWidth: 2 } } : {}),
+    }));
+
+    if (!showPCLabels) return pnEdges;
+
+    const pcDashedEdges: Edge[] = presenceConditions.flatMap(pc =>
+      pc.elementIds
+        .filter(id => nodeIds.has(id))
+        .map(elemId => ({
+          id: `pc-annot-edge-${pc.id}-${elemId}`,
+          source: `pc-annot-${pc.id}`,
+          target: elemId,
+          style: { strokeDasharray: '5,4', stroke: '#9ca3af', strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af', width: 10, height: 10 },
+          selectable: false,
+          deletable: false,
+          focusable: false,
+        }))
+    );
+
+    return [...pnEdges, ...pcDashedEdges];
+  }, [edges, nodes, presenceConditions, highlightedPcId, showPCLabels]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -543,7 +620,7 @@ function App() {
               nodes={displayNodes}
               edges={displayEdges}
               nodeTypes={nodeTypes}
-              onNodesChange={onNodesChange}
+              onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onConnectStart={() => {

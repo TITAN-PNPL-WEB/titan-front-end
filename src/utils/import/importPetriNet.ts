@@ -6,6 +6,41 @@ const PLACE_SIZE = 60;
 const TRANS_W    = 40;
 const TRANS_H    = 60;
 
+// Angles (degrees) matching the 8 handle positions defined in PlaceNode/TransitionNode
+const HANDLE_ANGLES = [
+  { id: 'n',  angle: -90  },
+  { id: 'ne', angle: -45  },
+  { id: 'e',  angle:   0  },
+  { id: 'se', angle:  45  },
+  { id: 's',  angle:  90  },
+  { id: 'sw', angle: 135  },
+  { id: 'w',  angle: 180  },
+  { id: 'nw', angle: -135 },
+];
+
+function nodeCenter(pos: { x: number; y: number }, type: 'place' | 'transition') {
+  return type === 'place'
+    ? { x: pos.x + PLACE_SIZE / 2, y: pos.y + PLACE_SIZE / 2 }
+    : { x: pos.x + TRANS_W  / 2,  y: pos.y + TRANS_H   / 2  };
+}
+
+// Pick the closest handle by angle; prefer unused handles to spread arcs across the node border.
+function pickHandle(
+  from: { x: number; y: number },
+  to:   { x: number; y: number },
+  used: Set<string>,
+): string {
+  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+  const ranked = [...HANDLE_ANGLES].sort((a, b) => {
+    const da = Math.abs(((angle - a.angle + 540) % 360) - 180);
+    const db = Math.abs(((angle - b.angle + 540) % 360) - 180);
+    return da - db;
+  });
+  const best = ranked.find(h => !used.has(h.id)) ?? ranked[0];
+  used.add(best.id);
+  return best.id;
+}
+
 function layoutPN(
   placeIds: string[],
   transIds: string[],
@@ -99,20 +134,41 @@ export function importPetriNet(xml: string): PNImportResult {
     })),
   ];
 
+  // Per-node sets of already-assigned handles (source and target tracked separately)
+  const srcHandles = new Map<string, Set<string>>();
+  const tgtHandles = new Map<string, Set<string>>();
+
   const edges: Edge[] = arcData
     .filter(a => a.source && a.target)
-    .map(a => ({
-      id:     a.id,
-      source: a.source,
-      target: a.target,
-      label:  a.name,
-      labelStyle:          { fontSize: 11 },
-      labelBgStyle:        { fill: '#fff', fillOpacity: 0.85 },
-      labelBgPadding:      [4, 4] as [number, number],
-      labelBgBorderRadius: 3,
-      data:   { label: a.name, arcType: a.isPT ? 'PT' : 'TP' },
-      markerEnd: { type: MarkerType.ArrowClosed },
-    }));
+    .map(a => {
+      const srcType: 'place' | 'transition' = a.isPT ? 'place' : 'transition';
+      const tgtType: 'place' | 'transition' = a.isPT ? 'transition' : 'place';
+      const srcPos = pos.get(a.source) ?? { x: 0, y: 0 };
+      const tgtPos = pos.get(a.target) ?? { x: 0, y: 0 };
+      const srcCenter = nodeCenter(srcPos, srcType);
+      const tgtCenter = nodeCenter(tgtPos, tgtType);
+
+      if (!srcHandles.has(a.source)) srcHandles.set(a.source, new Set());
+      if (!tgtHandles.has(a.target)) tgtHandles.set(a.target, new Set());
+
+      const sourceHandle = pickHandle(srcCenter, tgtCenter, srcHandles.get(a.source)!);
+      const targetHandle = pickHandle(tgtCenter, srcCenter, tgtHandles.get(a.target)!);
+
+      return {
+        id:           a.id,
+        source:       a.source,
+        target:       a.target,
+        sourceHandle,
+        targetHandle,
+        label:        a.name,
+        labelStyle:          { fontSize: 11 },
+        labelBgStyle:        { fill: '#fff', fillOpacity: 0.85 },
+        labelBgPadding:      [4, 4] as [number, number],
+        labelBgBorderRadius: 3,
+        data:         { label: a.name, arcType: a.isPT ? 'PT' : 'TP' },
+        markerEnd:    { type: MarkerType.ArrowClosed },
+      };
+    });
 
   let maxArcIndex = 0;
   for (const a of arcData) {
