@@ -36,6 +36,9 @@ import { exportVariability } from './utils/export/exportVariability';
 import { importPetriNet } from './utils/import/importPetriNet';
 import { importFeatureModel } from './utils/import/importFeatureModel';
 import { importVariability } from './utils/import/importVariability';
+import AnalyzeModal, { type ModelFiles } from './components/AnalyzeModal';
+import ImportStatusModal, { type ImportStatus } from './components/ImportStatusModal';
+import { uploadFiles, validateModel } from './utils/api/titanApi';
 
 const nodeTypes = {
   place: PlaceNode,
@@ -61,6 +64,8 @@ function App() {
   const [highlightedPcId, setHighlightedPcId] = useState<string | null>(null);
   const [showPCLabels, setShowPCLabels] = useState(true);
   const [pcAnnotationPositions, setPcAnnotationPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
 
   const fmPanelRef = useRef<FeatureModelPanelRef>(null);
 
@@ -78,6 +83,22 @@ function App() {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
+
+  const generateModelFiles = useCallback((): ModelFiles => {
+    const fmData = fmPanelRef.current?.getFmExportData();
+    if (!fmData) throw new Error('Feature Model data not available');
+    const pnFilename  = '150mm.petrinets';
+    const fmFilename  = 'model.xml';
+    const vrbFilename = 'annotation.vrb';
+    return {
+      petrinets:          new Blob([exportPetriNet(nodes, edges)], { type: 'text/plain' }),
+      petrinetsFilename:  pnFilename,
+      featureModel:       new Blob([exportFeatureModel(fmData.nodes, fmData.edges, fmData.constraints)], { type: 'text/plain' }),
+      featureModelFilename: fmFilename,
+      vrb:                new Blob([exportVariability(presenceConditions, nodes, edges, fmFeatures, pnFilename, fmFilename)], { type: 'text/plain' }),
+      vrbFilename,
+    };
+  }, [nodes, edges, presenceConditions, fmFeatures]);
 
   const handleExport = useCallback(() => {
     const fmData = fmPanelRef.current?.getFmExportData();
@@ -105,20 +126,38 @@ function App() {
 
     if (!pnFile && !fmFile && !vrbFile) return;
 
-    // Enforce import order: FM → PN → VRB
-    if (pnFile && !fmFile && fmFeatures.length === 0) {
-      alert('Import the Feature Model (.xml) first, then the Petri Net (.petrinets).');
-      return;
-    }
+    // When VRB is included, require all 3 and validate with backend before rendering
     if (vrbFile) {
-      const fmAvailable = !!fmFile || fmFeatures.length > 0;
-      const pnAvailable = !!pnFile || nodesRef.current.length > 0;
-      if (!fmAvailable) {
-        alert('Import the Feature Model (.xml) before importing variability (.vrb).');
+      if (!pnFile || !fmFile) {
+        setImportStatus({ phase: 'invalid', issues: [{
+          severity: 'ERROR',
+          message: 'Please select all 3 files together: .petrinets, .xml, and .vrb.',
+          line: 0, column: 0,
+        }] });
         return;
       }
-      if (!pnAvailable) {
-        alert('Import the Petri Net (.petrinets) before importing variability (.vrb).');
+
+      setImportStatus({ phase: 'validating' });
+      try {
+        const { vrbPath } = await uploadFiles(
+          vrbFile, vrbFile.name,
+          pnFile,  pnFile.name,
+          fmFile,  fmFile.name,
+        );
+        const { valid, issues } = await validateModel(vrbPath);
+        if (!valid) {
+          setImportStatus({ phase: 'invalid', issues });
+          return;
+        }
+        setImportStatus(null);
+      } catch (err) {
+        setImportStatus({ phase: 'error', message: `Could not connect to validation server: ${String(err)}` });
+        return;
+      }
+    } else {
+      // FM/PN only — enforce order without backend validation
+      if (pnFile && !fmFile && fmFeatures.length === 0) {
+        alert('Import the Feature Model (.xml) first, then the Petri Net (.petrinets).');
         return;
       }
     }
@@ -570,7 +609,13 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      <Toolbar onExport={handleExport} exportDisabled={nodes.length === 0 && fmFeatures.length === 0} onImport={handleImport} />
+      <Toolbar
+        onExport={handleExport}
+        exportDisabled={nodes.length === 0 && fmFeatures.length === 0}
+        onImport={handleImport}
+        onAnalyze={() => setAnalyzeModalOpen(true)}
+        analyzeDisabled={nodes.length === 0 && fmFeatures.length === 0}
+      />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
@@ -666,6 +711,17 @@ function App() {
         </div>
 
       </div>
+
+      {importStatus && (
+        <ImportStatusModal status={importStatus} onClose={() => setImportStatus(null)} />
+      )}
+
+      {analyzeModalOpen && (
+        <AnalyzeModal
+          generateFiles={generateModelFiles}
+          onClose={() => setAnalyzeModalOpen(false)}
+        />
+      )}
 
       {pcModalOpen && (
         <PresenceConditionModal

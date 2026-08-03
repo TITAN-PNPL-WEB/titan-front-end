@@ -4,6 +4,8 @@ interface Props {
   onExport?: () => void;
   exportDisabled?: boolean;
   onImport?: (files: File[]) => void;
+  onAnalyze?: () => void;
+  analyzeDisabled?: boolean;
 }
 
 const btnStyle: React.CSSProperties = {
@@ -17,7 +19,7 @@ const btnStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
-function Toolbar({ onExport, exportDisabled, onImport }: Props) {
+function Toolbar({ onExport, exportDisabled, onImport, onAnalyze, analyzeDisabled }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -69,6 +71,15 @@ function Toolbar({ onExport, exportDisabled, onImport }: Props) {
             style={{ ...btnStyle, opacity: exportDisabled ? 0.4 : 1, cursor: exportDisabled ? 'not-allowed' : 'pointer' }}
           >
             Export Files
+          </button>
+        )}
+        {onAnalyze && (
+          <button
+            onClick={onAnalyze}
+            disabled={analyzeDisabled}
+            style={{ ...btnStyle, opacity: analyzeDisabled ? 0.4 : 1, cursor: analyzeDisabled ? 'not-allowed' : 'pointer' }}
+          >
+            Analyze
           </button>
         )}
       </div>

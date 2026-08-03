@@ -55,6 +55,9 @@ class Parser {
       const opTok = this.consume().toLowerCase();
       const right = this.parseExpr();
       this.expect(')');
+      if (opTok !== 'and' && opTok !== 'or' && opTok !== 'implies') {
+        throw new Error(`Unknown operator: ${opTok}`);
+      }
       const op = opTok === 'and' ? 'AND' : opTok === 'or' ? 'OR' : 'IMPLIES';
       return { type: 'binary', op, left, right };
     }
