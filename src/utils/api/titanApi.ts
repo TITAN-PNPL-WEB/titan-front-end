@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8080/pnpl';
+const API_BASE = 'https://titan-api-pyts.onrender.com/pnpl';
 
 export interface ValidationIssue {
   severity: string;
