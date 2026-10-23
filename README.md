@@ -18,7 +18,7 @@ Both panels are backed by `@xyflow/react`. The Feature Model tree is auto-laid o
 ### Petri Net editor
 - Add **places** (circles) and **transitions** (rectangles) by clicking on the canvas
 - Draw directed arcs (PT and TP) between elements
-- Select and edit element properties (label, token count, arc weight) via the properties panel
+- Select and edit element properties (label, token count for places; label for arcs) via the properties panel
 - Multi-select elements for bulk operations
 - Delete elements via toolbar button or `Delete` / `Backspace` keys
 - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z`)
@@ -75,7 +75,7 @@ The **Analyze** button is disabled when the canvas is empty.
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20
 - npm
 - TITAN backend running at `http://localhost:8080` (required for Analyze and import validation)
 
@@ -138,7 +138,7 @@ src/
 │   │   ├── FeatureModelPanel.tsx  # Self-contained FM editor with dagre layout
 │   │   ├── FeatureNode.tsx        # Custom FM node (inline rename, abstract badge)
 │   │   ├── GroupEdge.tsx          # Custom edge rendering OR/XOR group arcs
-│   │   └── ConstraintBuilder.tsx  # Controlled constraint editor (shared by FM and PC modal)
+│   │   └── ConstraintBuilder.tsx  # Constraint editor for cross-tree FM constraints (FM panel only)
 │   └── pn/
 │       ├── PlaceNode.tsx          # Custom PN place node
 │       ├── TransitionNode.tsx     # Custom PN transition node
@@ -165,7 +165,7 @@ src/
     ├── fm/
     │   └── validateFeatureModel.ts  # Structural validation (useMemo, returns ValidationError[])
     └── pn/
-        ├── pcExpression.ts           # pcExpressionToString, collectFeatureIds
+        ├── pcExpression.ts           # pcExpressionToString, evaluatePcExpression, collectPcFeatureIds
         ├── evaluatePresenceCondition.ts
         └── validatePresenceCondition.ts
 ```
