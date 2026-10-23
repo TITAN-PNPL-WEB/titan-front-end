@@ -63,7 +63,6 @@ function App() {
   const [fmFeatures, setFmFeatures] = useState<FMFeature[]>([]);
   const [highlightedPcId, setHighlightedPcId] = useState<string | null>(null);
   const [showPCLabels, setShowPCLabels] = useState(true);
-  const [pcAnnotationPositions, setPcAnnotationPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
 
@@ -199,7 +198,6 @@ function App() {
     if (vrbText !== null) {
       const pcs = importVariability(vrbText, effectivePnNodes, effectivePnEdges, effectiveFmFeatures);
       setPresenceConditions(pcs);
-      setPcAnnotationPositions({});
     }
   }, [setNodes, setEdges, fmFeatures]);
 
@@ -272,7 +270,6 @@ function App() {
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    if (node.id.startsWith('pc-annot-')) return;
     if (selectedToolRef.current !== 'select') return;
     setPropertiesNode(node);
     setPropertiesEdge(null);
@@ -366,26 +363,10 @@ function App() {
 
   const removePresenceCondition = useCallback((id: string) => {
     setPresenceConditions(prev => prev.filter(pc => pc.id !== id));
-    setPcAnnotationPositions(prev => { const n = { ...prev }; delete n[id]; return n; });
   }, []);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    const pcUpdates: Record<string, { x: number; y: number }> = {};
-    const pnChanges: NodeChange[] = [];
-    for (const change of changes) {
-      const id = 'id' in change ? (change as { id: string }).id : '';
-      if (id.startsWith('pc-annot-')) {
-        if (change.type === 'position' && change.position) {
-          pcUpdates[id.slice('pc-annot-'.length)] = change.position;
-        }
-      } else {
-        pnChanges.push(change);
-      }
-    }
-    if (Object.keys(pcUpdates).length > 0) {
-      setPcAnnotationPositions(prev => ({ ...prev, ...pcUpdates }));
-    }
-    if (pnChanges.length > 0) onNodesChange(pnChanges);
+    onNodesChange(changes);
   }, [onNodesChange]);
 
   const handleRemovePC = useCallback((pcId: string) => {
@@ -511,6 +492,14 @@ function App() {
   }, [undo, redo, deleteSelected, pcModalOpen]);
 
   const [splitPos, setSplitPos] = useState(50);
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ pcId: string }>) => {
+      setHighlightedPcId(prev => prev === e.detail.pcId ? null : e.detail.pcId);
+    };
+    window.addEventListener('pc-badge-click', handler as EventListener);
+    return () => window.removeEventListener('pc-badge-click', handler as EventListener);
+  }, []);
+
   const isDragging = useRef(false);
 
   const onDividerMouseDown = useCallback(() => {
@@ -540,71 +529,39 @@ function App() {
       ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
       : new Set<string>();
 
-    const pnNodes = nodes.map(n => {
+    const nodePcInfo = new Map<string, { label: string; pcId: string }>();
+    if (showPCLabels) {
+      for (const pc of presenceConditions) {
+        const label = pcExpressionToString(pc.expression, fmFeatures);
+        for (const id of pc.elementIds) nodePcInfo.set(id, { label, pcId: pc.id });
+      }
+    }
+
+    return nodes.map(n => {
       const pcHighlight = highlightIds.has(n.id);
-      if (!pcHighlight) return n;
-      return { ...n, data: { ...n.data, pcHighlight: true } };
-    });
-
-    if (!showPCLabels) return pnNodes;
-
-    const pcAnnotNodes = presenceConditions.map(pc => {
-      const positions = pc.elementIds
-        .map(id => nodes.find(n => n.id === id)?.position)
-        .filter(Boolean) as { x: number; y: number }[];
-      const defaultPos = positions.length > 0
-        ? {
-            x: positions.reduce((s, p) => s + p.x, 0) / positions.length + 80,
-            y: positions.reduce((s, p) => s + p.y, 0) / positions.length - 60,
-          }
-        : { x: 100, y: 50 };
+      const info = nodePcInfo.get(n.id);
+      if (!pcHighlight && !info) return n;
       return {
-        id: `pc-annot-${pc.id}`,
-        type: 'pcAnnotation' as const,
-        position: pcAnnotationPositions[pc.id] ?? defaultPos,
+        ...n,
         data: {
-          label: pcExpressionToString(pc.expression, fmFeatures),
-          highlighted: pc.id === highlightedPcId,
+          ...n.data,
+          ...(pcHighlight ? { pcHighlight: true } : {}),
+          ...(info ? { pcLabel: info.label, pcId: info.pcId } : {}),
         },
-        draggable: true,
-        selectable: false,
-        deletable: false,
       };
     });
-
-    return [...pnNodes, ...pcAnnotNodes];
-  }, [nodes, presenceConditions, fmFeatures, highlightedPcId, showPCLabels, pcAnnotationPositions]);
+  }, [nodes, presenceConditions, fmFeatures, highlightedPcId, showPCLabels]);
 
   const displayEdges = useMemo(() => {
     const highlightIds = highlightedPcId
       ? new Set(presenceConditions.find(p => p.id === highlightedPcId)?.elementIds ?? [])
       : new Set<string>();
-    const nodeIds = new Set(nodes.map(n => n.id));
 
-    const pnEdges = edges.map(e => ({
+    return edges.map(e => ({
       ...e,
       ...(highlightIds.has(e.id) ? { style: { stroke: '#f5a623', strokeWidth: 2 } } : {}),
     }));
-
-    if (!showPCLabels) return pnEdges;
-
-    const pcDashedEdges: Edge[] = presenceConditions.flatMap(pc =>
-      pc.elementIds
-        .filter(id => nodeIds.has(id))
-        .map(elemId => ({
-          id: `pc-annot-edge-${pc.id}-${elemId}`,
-          source: `pc-annot-${pc.id}`,
-          target: elemId,
-          style: { strokeDasharray: '5,4', stroke: '#9ca3af', strokeWidth: 1.5 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af', width: 10, height: 10 },
-          selectable: false,
-          deletable: false,
-          focusable: false,
-        }))
-    );
-
-    return [...pnEdges, ...pcDashedEdges];
-  }, [edges, nodes, presenceConditions, highlightedPcId, showPCLabels]);
+  }, [edges, presenceConditions, highlightedPcId]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>

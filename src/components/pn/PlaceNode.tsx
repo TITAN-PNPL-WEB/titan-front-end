@@ -16,7 +16,7 @@ const HANDLE_ANGLES = [
   { id: 'nw', deg: -135, position: Position.Top },
 ];
 
-function PlaceNode({ data, selected }: { data: PlaceData & { pcLabel?: string; pcHighlight?: boolean }; selected: boolean }) {
+function PlaceNode({ data, selected }: { data: PlaceData & { pcLabel?: string; pcId?: string; pcHighlight?: boolean }; selected: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{
@@ -62,12 +62,19 @@ function PlaceNode({ data, selected }: { data: PlaceData & { pcLabel?: string; p
       </div>
       <span style={{ fontSize: 12, marginTop: 4 }}>{data.label}</span>
       {data.pcLabel && (
-        <span style={{
-          fontSize: 9, marginTop: 2, fontStyle: 'italic',
-          color: '#6d28d9', background: '#ede9fe',
-          borderRadius: 3, padding: '1px 4px', maxWidth: 80,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
+        <span
+          onClick={e => {
+            e.stopPropagation();
+            if (data.pcId) window.dispatchEvent(new CustomEvent('pc-badge-click', { detail: { pcId: data.pcId } }));
+          }}
+          style={{
+            fontSize: 9, marginTop: 2, fontStyle: 'italic',
+            color: '#6d28d9', background: '#ede9fe',
+            borderRadius: 3, padding: '1px 4px', maxWidth: 80,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          }}
+        >
           [{data.pcLabel}]
         </span>
       )}
