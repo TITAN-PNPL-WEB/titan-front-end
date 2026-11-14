@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LogStreamStatus } from '../../utils/api/titanApi';
 import type { LogLine } from './useLogStream';
 
@@ -33,6 +33,26 @@ const headerBtn: React.CSSProperties = {
   color: '#e5e5e5', cursor: 'pointer',
 };
 
+const MIN_HEIGHT = 120;
+const TOOLBAR_HEIGHT = 48;
+const HEIGHT_KEY = 'titan-log-panel-height';
+
+// Between MIN_HEIGHT and the space below the app toolbar
+function clampHeight(height: number): number {
+  return Math.min(Math.max(height, MIN_HEIGHT), Math.max(MIN_HEIGHT, window.innerHeight - TOOLBAR_HEIGHT));
+}
+
+// Last height chosen by the user, or 40% of the window
+function initialHeight(): number {
+  try {
+    const saved = Number(localStorage.getItem(HEIGHT_KEY));
+    if (saved > 0) return clampHeight(saved);
+  } catch {
+    // storage unavailable: use the default
+  }
+  return clampHeight(Math.round(window.innerHeight * 0.4));
+}
+
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number, len = 2) => String(n).padStart(len, '0');
@@ -42,10 +62,14 @@ function formatTime(iso: string): string {
 /**
  * Drawer docked at the bottom of the window with the backend logs of this tab, live.
  * It sits above the modals, so an analysis can be followed while it runs.
+ * Its top edge can be dragged to resize it; the height is remembered in localStorage.
  */
 export default function LogPanel({ lines, status, onClear, onClose }: Props) {
   const [filter, setFilter] = useState('');
   const [showCore, setShowCore] = useState(true);
+  const [height, setHeight] = useState(initialHeight);
+  const [resizing, setResizing] = useState(false);
+  const [handleHover, setHandleHover] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
@@ -61,14 +85,59 @@ export default function LogPanel({ lines, status, onClear, onClose }: Props) {
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [visible]);
 
+  // Keep the panel inside the window when the window gets smaller
+  useEffect(() => {
+    const onResize = () => setHeight(h => clampHeight(h));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  function onHandlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault(); // no text selection while dragging
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setResizing(true);
+  }
+
+  function onHandlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (resizing) setHeight(clampHeight(window.innerHeight - e.clientY));
+  }
+
+  function onHandlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!resizing) return;
+    setResizing(false);
+    const final = clampHeight(window.innerHeight - e.clientY);
+    setHeight(final);
+    try {
+      localStorage.setItem(HEIGHT_KEY, String(final));
+    } catch {
+      // storage unavailable: the height is just not remembered
+    }
+  }
+
   const st = STATUS_LABEL[status];
 
   return (
     <div style={{
-      position: 'fixed', left: 0, right: 0, bottom: 0, height: '40vh', zIndex: 1100,
+      position: 'fixed', left: 0, right: 0, bottom: 0, height, zIndex: 1100,
       background: '#111', color: '#d4d4d4', display: 'flex', flexDirection: 'column',
       boxShadow: '0 -4px 16px rgba(0,0,0,0.3)', borderTop: '1px solid #333',
+      userSelect: resizing ? 'none' : undefined,
     }}>
+      {/* Resize handle on the top edge */}
+      <div
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        onMouseEnter={() => setHandleHover(true)}
+        onMouseLeave={() => setHandleHover(false)}
+        title="Drag to resize"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: -4, height: 8, zIndex: 1,
+          cursor: 'ns-resize', touchAction: 'none',
+          background: resizing || handleHover ? 'rgba(96,165,250,0.6)' : 'transparent',
+        }}
+      />
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px',
         borderBottom: '1px solid #2a2a2a', background: '#1a1a1a', flexShrink: 0, flexWrap: 'wrap',
