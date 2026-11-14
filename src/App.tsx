@@ -38,6 +38,8 @@ import { importFeatureModel } from './utils/import/importFeatureModel';
 import { importVariability } from './utils/import/importVariability';
 import AnalyzeModal, { type ModelFiles } from './components/AnalyzeModal';
 import ImportStatusModal, { type ImportStatus } from './components/ImportStatusModal';
+import LogPanel from './components/logpanel/LogPanel';
+import { useLogStream } from './components/logpanel/useLogStream';
 import { uploadFiles, validateModel } from './utils/api/titanApi';
 
 const nodeTypes = {
@@ -65,6 +67,15 @@ function App() {
   const [showPCLabels, setShowPCLabels] = useState(true);
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logErrorsSeen, setLogErrorsSeen] = useState(0);
+  const logStream = useLogStream();
+  // Errors that arrived while the log panel was closed; the ones received while open count as seen
+  const unreadLogErrors = logsOpen ? 0 : logStream.errorCount - logErrorsSeen;
+  const toggleLogs = useCallback((open: boolean) => {
+    setLogErrorsSeen(logStream.errorCount);
+    setLogsOpen(open);
+  }, [logStream.errorCount]);
 
   const fmPanelRef = useRef<FeatureModelPanelRef>(null);
 
@@ -572,6 +583,9 @@ function App() {
         onImport={handleImport}
         onAnalyze={() => setAnalyzeModalOpen(true)}
         analyzeDisabled={nodes.length === 0 && fmFeatures.length === 0}
+        onToggleLogs={() => toggleLogs(!logsOpen)}
+        logsOpen={logsOpen}
+        logsUnreadErrors={unreadLogErrors}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -677,6 +691,16 @@ function App() {
         <AnalyzeModal
           generateFiles={generateModelFiles}
           onClose={() => setAnalyzeModalOpen(false)}
+          onShowLogs={() => toggleLogs(true)}
+        />
+      )}
+
+      {logsOpen && (
+        <LogPanel
+          lines={logStream.lines}
+          status={logStream.status}
+          onClear={logStream.clear}
+          onClose={() => toggleLogs(false)}
         />
       )}
 

@@ -6,6 +6,9 @@ interface Props {
   onImport?: (files: File[]) => void;
   onAnalyze?: () => void;
   analyzeDisabled?: boolean;
+  onToggleLogs?: () => void;
+  logsOpen?: boolean;
+  logsUnreadErrors?: number;
 }
 
 const btnStyle: React.CSSProperties = {
@@ -19,7 +22,7 @@ const btnStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
-function Toolbar({ onExport, exportDisabled, onImport, onAnalyze, analyzeDisabled }: Props) {
+function Toolbar({ onExport, exportDisabled, onImport, onAnalyze, analyzeDisabled, onToggleLogs, logsOpen, logsUnreadErrors = 0 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -80,6 +83,24 @@ function Toolbar({ onExport, exportDisabled, onImport, onAnalyze, analyzeDisable
             style={{ ...btnStyle, opacity: analyzeDisabled ? 0.4 : 1, cursor: analyzeDisabled ? 'not-allowed' : 'pointer' }}
           >
             Analyze
+          </button>
+        )}
+        {onToggleLogs && (
+          <button
+            onClick={onToggleLogs}
+            title={logsUnreadErrors > 0 ? `${logsUnreadErrors} new errors` : undefined}
+            style={{ ...btnStyle, position: 'relative', background: logsOpen ? 'rgba(255,255,255,0.25)' : btnStyle.background }}
+          >
+            Logs
+            {logsUnreadErrors > 0 && (
+              <span style={{
+                position: 'absolute', top: -6, right: -6, minWidth: 16, height: 16, padding: '0 4px',
+                borderRadius: 8, background: '#dc2626', color: '#fff', fontSize: 10, lineHeight: '16px',
+                textAlign: 'center', boxSizing: 'border-box',
+              }}>
+                {logsUnreadErrors > 99 ? '99+' : logsUnreadErrors}
+              </span>
+            )}
           </button>
         )}
       </div>

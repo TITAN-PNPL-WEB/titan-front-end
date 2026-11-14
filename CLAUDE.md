@@ -62,8 +62,21 @@ The four functions and their contracts:
 | `validateModel` | POST | `/validate` | `{ vrbPath }` | `{ valid, issues[] }` |
 | `getAnalyses` | GET | `/analyses` | — | `{ analyses[] }` |
 | `runAnalysis` | POST | `/analyze` | `{ vrbPath, name, type }` | `AnalysisResult` |
+| `openLogStream` | GET (SSE) | `/logs/{LOG_SESSION_ID}` | — | `log` events with a `LogEvent` (`seq`, `timestamp`, `level`, `source`, `message`) |
 
 `vrbPath` is a server-side temp path returned by `/upload` and reused in all subsequent calls within the same session.
+
+Every request sends the header `X-Log-Session: LOG_SESSION_ID`, a UUID created once per browser tab and kept in `sessionStorage`. The API streams back the logs of those requests (including everything the TITAN core prints) only to `GET /logs/{LOG_SESSION_ID}`. A new `fetch` to the API must include `SESSION_HEADER`, or its logs will not reach the panel.
+
+---
+
+## Log panel
+
+- `useLogStream()` (`src/components/logpanel/useLogStream.ts`) is called once in `App.tsx`. It keeps the `EventSource` open while the app is mounted, so lines are collected with the panel closed. Lines are batched (one re-render every 150 ms) and capped at 5000: a products analysis can print thousands of lines per second.
+- `LogPanel` is a drawer fixed at the bottom with `zIndex` 1100, above the modals (`zIndex` 1000), so an analysis can be followed while `AnalyzeModal` is open. It is opened from the `Logs` toolbar button or the `Show logs` button of `AnalyzeModal`.
+- The `Logs` button shows a red badge with the ERROR lines received while the panel was closed.
+- A jump in `seq` means the API dropped lines (it does not slow down the analysis for a slow client); the panel shows "N lines skipped".
+- Do not name a folder `logs`: `.gitignore` (Vite template) ignores it, and the files would silently stay out of the repo.
 
 ---
 

@@ -21,6 +21,7 @@ export interface ModelFiles {
 interface Props {
   generateFiles: () => ModelFiles;
   onClose: () => void;
+  onShowLogs?: () => void;
 }
 
 type Phase =
@@ -80,7 +81,7 @@ const TYPE_LABELS: Record<string, string> = {
   products: 'Product Analyses',
 };
 
-export default function AnalyzeModal({ generateFiles, onClose }: Props) {
+export default function AnalyzeModal({ generateFiles, onClose, onShowLogs }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'uploading' });
   const started = useRef(false);
 
@@ -256,6 +257,11 @@ export default function AnalyzeModal({ generateFiles, onClose }: Props) {
             <div style={{ color: '#555', fontSize: 13 }}>
               <Spinner />Running {phase.analysisName}...
             </div>
+            {onShowLogs && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={onShowLogs}>Show logs</button>
+              </div>
+            )}
           </>
         );
 
@@ -277,6 +283,7 @@ export default function AnalyzeModal({ generateFiles, onClose }: Props) {
               <div style={{ marginTop: 6, color: '#9ca3af', fontSize: 12 }}>Time: {r.timeMs} ms</div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              {onShowLogs && <button style={btnSecondary} onClick={onShowLogs}>Show logs</button>}
               <button
                 style={btnSecondary}
                 onClick={() => setPhase({ kind: 'select', vrbPath: phase.vrbPath, analyses: phase.analyses })}
