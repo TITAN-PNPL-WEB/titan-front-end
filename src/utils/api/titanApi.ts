@@ -1,5 +1,5 @@
-//const API_BASE = 'https://titan-api-pyts.onrender.com/pnpl';
-const API_BASE = 'http://localhost:8080/pnpl';
+// Set by VITE_API_BASE: .env.production points the deployed build to Render; npm run dev uses the local API
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080/pnpl';
 
 
 export interface ValidationIssue {

@@ -48,11 +48,13 @@ Feature Model state is entirely internal to `FeatureModelPanel.tsx`. The only da
 
 ## Backend API
 
-Backend base URL is configured at the top of `src/utils/api/titanApi.ts`:
+Backend base URL comes from the `VITE_API_BASE` environment variable, read at the top of `src/utils/api/titanApi.ts`:
 
-```ts
-const API_BASE = 'https://titan-api-pyts.onrender.com/pnpl';
-```
+- `npm run dev`: not set, so it falls back to `http://localhost:8080/pnpl` (the API running locally).
+- `npm run build` (Vercel): `.env.production` sets `https://titan-api-pyts.onrender.com/pnpl`.
+- To point a local build or dev server elsewhere, create `.env.local` or `.env.production.local` (ignored by git through `*.local`). A `VITE_API_BASE` set in the Vercel project settings also overrides `.env.production`.
+
+Vite inlines the value at build time: changing it needs a new build, not just a restart of the deployed site.
 
 The four functions and their contracts:
 
